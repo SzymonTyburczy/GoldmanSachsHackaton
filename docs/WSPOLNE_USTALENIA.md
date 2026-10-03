@@ -371,7 +371,7 @@ Każda kontrola ma test wykrywający jej wyłączenie w kopii testowej. Zestaw A
 | `make reload-config` | Zweryfikowany import plików polityki/feedu przez wspólną ścieżkę aktywacji |
 | `make reset-demo` | Reset wyłącznie syntetycznych zadań i lokalnej bazy demo, po świadomym wywołaniu przez operatora |
 
-Po A1 działają `make setup`, `make dev`, `make check` i `make test`; od A2 `make setup` uzupełnia także puste tokeny demo, a od A4 importuje konfigurację i sprawdza Presidio. Od A4 działa też `make reload-config`. Pozostałe komendy kończą się błędem do czasu implementacji. README otrzyma sprawdzone instrukcje podczas A7/B6. Reset nie resetuje rzeczywistego rachunku dostawcy. Każdy raport podaje datę, model, konfigurację, commit, liczebność, błędy i zakres; offline oraz live są widoczne osobno.
+Po A1 działają `make setup`, `make dev`, `make check` i `make test`; od A2 `make setup` uzupełnia także puste tokeny demo, a od A4 importuje konfigurację i sprawdza Presidio. Od A4 działa też `make reload-config`; `make test-live`, `make verify` i `make benchmark` dostarczyła osoba 2. `make reset-demo` kończy się błędem do czasu implementacji. README otrzyma sprawdzone instrukcje podczas A7/B6. Reset nie resetuje rzeczywistego rachunku dostawcy. Każdy raport podaje datę, model, konfigurację, commit, liczebność, błędy i zakres; offline oraz live są widoczne osobno.
 
 ## 10. Warunki ukończenia
 

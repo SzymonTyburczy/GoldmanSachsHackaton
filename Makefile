@@ -1,9 +1,10 @@
-# ControlProof developer commands. Implemented: setup, dev, check, format, test, reload-config.
-# Targets marked "not implemented" fail on purpose so they never look like a passed check.
+# ControlProof developer commands. Live checks make real, billable provider requests.
+# reset-demo is not implemented yet and fails on purpose so it never looks like a passed check.
 
 UV ?= uv
 HOST ?= 127.0.0.1
 PORT ?= 8000
+ITERATIONS ?= 100
 # Load .env for app commands only when it exists. Tests never load it.
 WITH_ENV = $$(test -f .env && echo --env-file=.env)
 
@@ -17,8 +18,9 @@ help:
 	@echo "check      Ruff lint and format check"
 	@echo "format     apply Ruff formatting and safe fixes"
 	@echo "test       offline tests; network to TypeSafe and OpenAI is blocked"
-	@echo "test-live  paid Jev and Luna tests (not implemented yet, B5)"
+	@echo "test-live  paid Luna smoke test and 12-sample Jev evaluation (requires local API keys)"
 	@echo "verify     check + test + test-live"
+	@echo "benchmark  100 offline component measurements; use LIVE=1 for the budgeted 12-case provider run"
 	@echo "reload-config  validate config/policy.json and config/threat-feed.json, activate changes"
 
 setup:
@@ -44,12 +46,22 @@ test:
 	$(UV) run pytest -m "not live"
 
 test-live:
-	@echo "test-live is not implemented yet (B5): no live verification was run." >&2; exit 1
+	$(UV) run $(WITH_ENV) python -m scripts.check_live_credentials
+	$(UV) run $(WITH_ENV) pytest -m live
+	$(UV) run $(WITH_ENV) python -m scripts.evaluate
 
 verify: check test test-live
+
+benchmark:
+	@if [ "$(LIVE)" = "1" ]; then \
+		$(UV) run $(WITH_ENV) python -m scripts.check_live_credentials && \
+		$(UV) run $(WITH_ENV) python -m scripts.benchmark --live --iterations $(ITERATIONS); \
+	else \
+		$(UV) run $(WITH_ENV) python -m scripts.benchmark --iterations $(ITERATIONS); \
+	fi
 
 reload-config:
 	$(UV) run $(WITH_ENV) python -m app.policy reload
 
-benchmark reset-demo:
+reset-demo:
 	@echo "$@ is not implemented yet." >&2; exit 1
