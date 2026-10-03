@@ -1,51 +1,69 @@
-# ContrAl — AI Control Layer
+<p align="center">
+  <img src="assets/readme/contral.svg" alt="ContrAl — AI control layer" width="480">
+</p>
 
-Warstwa kontroli pomiędzy aplikacją/agentem a dokumentami i modelami AI. Sprawdza dostęp, usuwa wskazane dane wrażliwe, wykrywa podejrzane instrukcje, ogranicza zużycie i zapisuje wynik każdej operacji.
+<p align="center">
+  <strong>Control what your AI can access, share and spend.</strong><br>
+  Built for the Goldman Sachs challenge at HackYeah 2026.
+</p>
 
-**Stan na 3.10.2026:** ukończone kroki A1–A6. Działają: `GET /health`, uwierzytelnienie trzema tokenami demo, zadania, `documents.read` i `documents.summarize` (kontrola dostępu przed odczytem, redakcja przez lokalne Presidio i regułę sekretów, Jev, Luna, rezerwacje budżetu, idempotencja i limity), `artifacts.admit` (manifest SHA-256, feed, ścisły schemat JSON), wersjonowana polityka i feed (`GET`/`PUT /admin/policy`, `/admin/feed`, `make reload-config`), audyt z historią i eksportem JSONL, `/admin/metrics`, `/admin/test-results` oraz panel operatora pod `/`. `make test` nie zapisuje raportu, więc panel pokazuje tylko raporty `make test-live` i `make benchmark`. Plan dotyczy **dwóch osób**.
+ContrAl sits between an agent and its tools. It checks permissions, redacts sensitive data, assesses suspicious instructions, reserves provider costs and records what actually executed. An operator dashboard brings requests, decisions, budgets, policy changes and audit history into one place.
 
-## Uruchomienie
+## How it works
 
-Wymagane: [uv](https://docs.astral.sh/uv/) i dostęp do internetu przy pierwszej instalacji. uv pobiera Pythona 3.12, pakiety i modele spaCy według `uv.lock`.
+- **Access control:** server-owned identities, roles and client scopes; unauthorized documents are blocked before reading.
+- **Data protection:** local Presidio and secret rules mask sensitive values before they reach either AI provider and filter generated output.
+- **Semantic checks:** TypeSafe Jev assesses instruction override and data exfiltration risk. A failed check stops generation; AI cannot override access rules.
+- **Resource control:** SQLite reservations track task, user and global budgets, request quotas and concurrency. Uncertain provider costs remain reserved after a timeout or restart.
+- **Artifact admission:** a trusted manifest, SHA-256 threat feed and strict JSON validation reject altered, blocked and unsupported artifacts without deserializing them.
+- **Auditability:** versioned policy/feed, per-adapter execution status, request history and JSONL export.
 
-```bash
-make setup   # uv sync --locked, .env z .env.example (jeśli brak), puste tokeny demo, lokalna baza, import config/, test Presidio
-make dev     # API i panel: http://127.0.0.1:8000
-make check   # Ruff
-make test    # testy offline; sieć do TypeSafe i OpenAI jest zablokowana
-make reload-config  # walidacja i aktywacja zmienionych config/policy.json i config/threat-feed.json
+The stack is Python 3.12, FastAPI, Pydantic, SQLite and a browser dashboard. Jev (`jev-1.13.0`) assesses risk; OpenAI Luna (`gpt-6-luna`) generates summaries.
+
+## Run locally
+
+Requires [uv](https://docs.astral.sh/uv/), Git, Make and internet access for the initial installation. Python and both spaCy language models are installed from the lockfile.
+
+```sh
+git clone https://github.com/SzymonTyburczy/GoldmanSachsHackaton.git
+cd GoldmanSachsHackaton
+make setup
 ```
 
-`make test-live`, `make verify` i `make benchmark LIVE=1` wysyłają płatne zapytania do TypeSafe i OpenAI i wymagają lokalnych kluczy; `make benchmark` bez `LIVE=1` mierzy tylko lokalne komponenty. `make reset-demo` jeszcze nie istnieje i kończy się błędem, żeby nie udawał udanej operacji.
+Setup creates `.env`, generates local bearer tokens, initializes SQLite and activates the default policy and feed. For document reads and AI summaries, add your own provider keys to `.env`:
 
-API wymaga nagłówka `Authorization: Bearer <token>` z `.env`: `CONTROLPROOF_TOKEN_ANALYST_A`, `CONTROLPROOF_TOKEN_REVIEWER_A` lub `CONTROLPROOF_TOKEN_ADMIN`. Tokenu nie podaje się w URL. `POST /v1/execute` wymaga aktywnej polityki i feedu; `make setup` aktywuje je z `config/`, jeśli baza jeszcze ich nie ma. Później źródłem prawdy jest wersja w bazie: zmiany wprowadza admin przez `PUT /admin/policy` albo `make reload-config`.
+```dotenv
+OPENAI_API_KEY=your-openai-api-key
+TYPESAFE_API_KEY=your-typesafe-api-key
+```
 
-## Czytaj w tej kolejności
+```sh
+make dev
+```
 
-1. [Podział pracy krok po kroku](docs/PLAN_DWOCH_OSOB.md) — czego każda osoba ma się nauczyć, co wykonać i kiedy połączyć pracę.
-2. [Zasady współpracy](CONTRIBUTING.md) — właściciele plików, Git, korzystanie z AI, testowanie i odbiór zmian.
-3. [Wspólne ustalenia techniczne](docs/WSPOLNE_USTALENIA.md) — stos, modele, API, formaty danych, polityka, budżet i scenariusz demo.
+Open the [dashboard](http://127.0.0.1:8000) or the [interactive API docs](http://127.0.0.1:8000/docs). Sign in using `CONTROLPROOF_TOKEN_ADMIN` from your local `.env` to access all operator views. Analyst and reviewer tokens provide restricted sessions. Tokens stay in the browser tab's memory.
 
-## Decyzje
+**Without provider keys:** the dashboard, configuration, artifact admission and offline tests work. Document operations require Jev; summaries also require OpenAI. Missing keys produce a denial, never a simulated AI result.
 
-| Obszar | Wybór |
-|---|---|
-| Backend | Python 3.12, FastAPI, Pydantic 2, Uvicorn |
-| Dane | SQLite, standardowy moduł `sqlite3` |
-| Panel | HTML, CSS i JavaScript z `fetch`, serwowane przez FastAPI |
-| Model generujący | OpenAI `gpt-6-luna`, Responses API, oficjalny SDK Python |
-| Ocena semantyczna | TypeSafe Jev `jev-1.13.0`, osobny adapter HTTP |
-| Wykrywanie i maskowanie PII | Presidio: `presidio-analyzer`, `presidio-anonymizer`, lokalne modele spaCy |
-| Praca nad kodem | Codex z modelem Luna; zasady w CONTRIBUTING |
-| Narzędzia | uv, pytest, pytest-asyncio, HTTPX, Ruff |
-| Uruchomienie demo | Jeden laptop, jeden proces aplikacji, przeglądarka i dostęp do internetu |
+## Try the demo
 
-Modele i konkretne ustawienia są opisane w jednym miejscu: we wspólnych ustaleniach. Dostęp do API, działanie modelu i wersje pakietów trzeba potwierdzić w pierwszym etapie implementacji.
+1. Sign in as admin and create a task for `client-a`.
+2. Run **Admit template**. Block its returned hash from the result panel, then run it again to see the feed change take effect. **Admit tampered** and **Admit non-JSON** demonstrate artifact rejection.
+3. With provider keys configured, try **Read A**, **Read B (other client)**, **Summarize A**, **PII in prompt** and **Prompt injection**. Inspect the decision and which adapters ran.
+4. Change a policy in the dashboard and inspect the resulting audit events, budget balances and JSONL export.
 
-## Materiały źródłowe
+## Configure and verify
 
-- [Pełny brief](dane_wejsciowe/opis_tasku.pdf) — wymagania techniczne i sposób oceny.
-- [Regulamin zadania](dane_wejsciowe/terms.pdf) — wymagane zgłoszenie i zasady konkursu.
-- [Rozmowa z mentorem](dane_wejsciowe/rozmowa.txt) — kontekst i interpretacja potrzeb; transkrypcja może zawierać błędy.
+Edit [`config/policy.json`](config/policy.json) for role/tool permissions, allowed fields, redaction, semantic threshold, model settings, pricing and resource limits. Edit [`config/threat-feed.json`](config/threat-feed.json) for artifact blocks. Run `make reload-config` to validate and activate changes, or update them in the admin dashboard. Active versions are stored in SQLite; editing a file alone does not change a running policy.
 
-Starszy research, warianty projektów i plan dla większego zespołu są w [archiwum](docs/archiwum/README.md). Nie należą do bieżącej instrukcji realizacji. Otwarte kwestie briefu i terminu znajdują się na końcu wspólnych ustaleń.
+```sh
+make check                  # Lint and formatting
+make test                   # Offline tests; provider network access is blocked
+make benchmark              # Offline component timings
+make test-live              # Real provider checks and 12-case Jev evaluation
+make benchmark GATEWAY=1    # Real end-to-end gateway measurements
+```
+
+Live commands require provider keys and incur API charges. Saved evaluation and benchmark reports appear in the dashboard; `make test` does not save a dashboard report.
+
+This release targets a local, single-process demonstration. It protects calls routed through its adapters; semantic detection and pattern-based redaction do not guarantee detection of every attack. Demo identities and supported adapters are defined in code, while policy values are configurable.
