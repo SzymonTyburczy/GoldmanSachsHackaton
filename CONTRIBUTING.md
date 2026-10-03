@@ -4,14 +4,14 @@ Obowiązują dla ludzi i używanych przez nich asystentów AI. Kolejność zada�
 
 ## 1. Odpowiedzialność
 
-**Osoba 1 integruje produkt. Osoba 2 odpowiada za AI, budżet i wspólny zestaw testów. Każda osoba testuje własne moduły.**
+**Maciek integruje produkt. Paweł odpowiada za AI, budżet i wspólny zestaw testów. Każda osoba testuje własne moduły.**
 
 | Właściciel | Planowane pliki / katalogi |
 |---|---|
-| Osoba 1 | `app/main.py`, `app/api/`, `app/gateway.py`, `app/auth.py`, `app/policy.py`, `app/audit.py`, `app/controls/access.py`, `app/controls/redaction.py`, `app/pii/`, `app/controls/artifacts.py`, `app/adapters/documents.py`, `app/tasks.py`, `data/`, `app/static/` |
-| Osoba 2 | `app/controls/semantic.py`, `app/budget.py`, `app/adapters/openai_luna.py`, `app/adapters/jev.py`, `app/prompts/`, `tests/semantic/`, `tests/budget/`, `tests/live/`, `scripts/evaluate.py`, `scripts/benchmark.py` |
-| Wspólne; zapis koordynuje osoba 1 | `app/contracts.py`, `app/db.py`, `app/schema.sql`, `config/`, `pyproject.toml`, `uv.lock`, `Makefile`, README i dokumentacja |
-| Testy własnej części | Osoba 1: `tests/gateway/`, `tests/policy/`, `tests/data/`, `tests/audit/`. Osoba 2 scala wykonanie całego zestawu. |
+| Maciek | `app/main.py`, `app/api/`, `app/gateway.py`, `app/auth.py`, `app/policy.py`, `app/audit.py`, `app/controls/access.py`, `app/controls/redaction.py`, `app/pii/`, `app/controls/artifacts.py`, `app/adapters/documents.py`, `app/tasks.py`, `data/`, `app/static/` |
+| Paweł | `app/controls/semantic.py`, `app/budget.py`, `app/adapters/openai_luna.py`, `app/adapters/jev.py`, `app/prompts/`, `tests/semantic/`, `tests/budget/`, `tests/live/`, `scripts/evaluate.py`, `scripts/benchmark.py` |
+| Wspólne; zapis koordynuje Maciek | `app/contracts.py`, `app/db.py`, `app/schema.sql`, `config/`, `pyproject.toml`, `uv.lock`, `Makefile`, README i dokumentacja |
+| Testy własnej części | Maciek: `tests/gateway/`, `tests/policy/`, `tests/data/`, `tests/audit/`. Paweł scala wykonanie całego zestawu. |
 
 Właściciel to pierwsza osoba odpowiedzialna za ukończenie i poprawki. Druga osoba może pomóc po krótkim ustaleniu zakresu. Nie edytujcie równocześnie tego samego pliku. Zmianę kontraktu, schematu bazy lub zależności najpierw opiszcie drugiej osobie, potem wprowadźcie razem z aktualizacją dokumentacji i wywołań.
 
@@ -30,7 +30,7 @@ Nie czekajcie do końca, aż cała połowa projektu będzie gotowa. Testowy zami
 - Każda osoba pracuje we własnym klonie lub worktree. Dwa branche w tym samym katalogu nie izolują edycji plików.
 - Krótkie branche: `codex/a-gateway`, `codex/b-budget`, potem następne zadania. Punktem wyjścia jest aktualna wspólna gałąź główna.
 - Małe commity według rezultatu, np. `feat: deny cross-client document access` albo `test: verify concurrent budget reservations`.
-- Osoba 1 scala zmiany po przeglądzie przez drugą osobę i przejściu wymaganych testów. Zmiany osoby 1 przegląda osoba 2.
+- Maciek scala zmiany po przeglądzie przez drugą osobę i przejściu wymaganych testów. Zmiany Maćka przegląda Paweł.
 - Przed integracją pobierz aktualny stan. Konflikty we wspólnych kontraktach rozwiążcie razem; nie wybierajcie automatycznie całej „naszej” lub „ich” wersji.
 - Nie commitujcie `.env`, kluczy, baz roboczych, logów z treścią wejść ani katalogu `.venv`. Syntetyczne dane i zanonimizowane wyniki testów można wersjonować.
 
@@ -55,7 +55,7 @@ Nie przekazujcie asystentom kluczy API. Klucze OpenAI i TypeSafe wpisuje właśc
 
 ## 5. Zależności i środowisko
 
-- Jeden Python 3.12 i jeden `uv.lock`. Osoba 1 tworzy projekt, osoba 2 sprawdza go na swoim laptopie. Modele spaCy pobieramy w setupie i przypinamy ich wersje; aplikacja nie pobiera ich podczas obsługi żądania.
+- Jeden Python 3.12 i jeden `uv.lock`. Maciek tworzy projekt, Paweł sprawdza go na swoim laptopie. Modele spaCy pobieramy w setupie i przypinamy ich wersje; aplikacja nie pobiera ich podczas obsługi żądania.
 - Wersje pakietów są przypinane przy pierwszej instalacji i zapisywane w lockfile. Nie wpisujemy nieprzetestowanych wersji patch do planu.
 - Po sklonowaniu używamy `uv sync --locked`. Zmiana zależności wymaga uzgodnienia i aktualizacji lockfile w tym samym commicie.
 - Do zakończenia podstaw używamy wyłącznie stosu z dokumentacji. Dodatkowa biblioteka musi skracać konkretne zadanie.
@@ -76,4 +76,4 @@ Zmiana samej dokumentacji wymaga sprawdzenia linków, zgodności kontraktów i `
 
 ## 7. Końcowe przekazanie
 
-Trzy godziny przed potwierdzonym deadline zamrażamy funkcje. Osoba 1 kończy opis, slajdy i zgłoszenie; osoba 2 sprawdza start na drugim laptopie, testy i nagranie. Oboje ćwiczymy demonstrację. Godzinę przed terminem wysyłamy pakiet, a następnie sprawdzamy zapis i dostęp do linków.
+Trzy godziny przed potwierdzonym deadline zamrażamy funkcje. Maciek kończy opis, slajdy i zgłoszenie; Paweł sprawdza start na drugim laptopie, testy i nagranie. Oboje ćwiczymy demonstrację. Godzinę przed terminem wysyłamy pakiet, a następnie sprawdzamy zapis i dostęp do linków.

@@ -63,16 +63,26 @@ def test_allowed_read_records_admission_intent_and_result(
         ("gateway", "admission", "ALLOW", "OK", "NOT_CALLED"),
         ("access", "pre_document", "ALLOW", "OK", "STARTED"),
         ("redaction", "pre_detector", "REDACT", "PII_REDACTED", "SUCCEEDED"),
+        ("budget", "pre_detector", "ALLOW", "OK", "STARTED"),
+        ("semantic", "pre_detector", "ALLOW", "OK", "SUCCEEDED"),
     ]
     assert [event["adapter_calls"] for event in events] == [
         NOTHING_CALLED,
         calls(document_read="STARTED"),
         calls(document_read="SUCCEEDED"),
+        calls(document_read="SUCCEEDED", detector="STARTED"),
+        calls(document_read="SUCCEEDED", detector="SUCCEEDED"),
     ]
     assert body["audit_event_ids"] == [event["event_id"] for event in events]
     assert events[2]["redacted_fields"] == body["redacted_fields"]
-    assert isinstance(events[2]["latency_ms"], int)
-    assert [event["latency_ms"] for event in events[:2]] == [None, None]
+    assert [event["latency_ms"] is None for event in events] == [True, True, False, True, False]
+    # The detector event carries its priced usage and the score; no other step has one.
+    assert events[4]["usage"] == body["usage"]
+    assert [usage["provider"] for usage in body["usage"]] == ["typesafe"]
+    assert events[4]["model"] == "jev-1.13.0"
+    assert events[4]["semantic"]["category"] == "benign"
+    for event in events[:4]:
+        assert (event["usage"], event["model"], event["semantic"]) == ([], None, None)
     for event in events:
         assert event["request_id"] == response.headers["X-Request-ID"]
         assert event["task_id"] == task_id
@@ -86,7 +96,6 @@ def test_allowed_read_records_admission_intent_and_result(
             1,
             1,
         )
-        assert (event["usage"], event["model"], event["semantic"]) == ([], None, None)
 
 
 @pytest.mark.usefixtures("active_config")
@@ -128,7 +137,7 @@ def test_unknown_document_leaves_the_same_trail_as_document_b(
 
 
 @pytest.mark.usefixtures("active_config")
-def test_summary_records_the_access_decision_without_a_read(
+def test_summary_records_each_adapter_after_its_reservation(
     client: TestClient, headers: Headers, new_task: NewTask, execute: Execute
 ) -> None:
     response = execute(
@@ -139,13 +148,31 @@ def test_summary_records_the_access_decision_without_a_read(
         prompt="Summarize this company.",
     )
 
-    assert response.status_code == 501
-    events = admin_events(client, headers, request_id=response.json()["request_id"])
+    body = response.json()
+    events = admin_events(client, headers, request_id=body["request_id"])
+    done = {"document_read": "SUCCEEDED", "detector": "SUCCEEDED"}
     assert steps(events) == [
         ("gateway", "admission", "ALLOW", "OK", "NOT_CALLED"),
-        ("access", "pre_document", "ALLOW", "OK", "NOT_CALLED"),
+        ("access", "pre_document", "ALLOW", "OK", "STARTED"),
+        ("redaction", "pre_detector", "REDACT", "PII_REDACTED", "SUCCEEDED"),
+        ("budget", "pre_detector", "ALLOW", "OK", "STARTED"),
+        ("semantic", "pre_detector", "ALLOW", "OK", "SUCCEEDED"),
+        ("budget", "pre_summary", "ALLOW", "OK", "STARTED"),
+        ("budget", "pre_summary", "ALLOW", "OK", "STARTED"),
+        ("redaction", "post_output", "ALLOW", "OK", "SUCCEEDED"),
     ]
-    assert all(event["adapter_calls"] == NOTHING_CALLED for event in events)
+    assert [event["adapter_calls"] for event in events[5:]] == [
+        calls(**done, token_count="STARTED"),
+        calls(**done, token_count="SUCCEEDED", summary="STARTED"),
+        calls(**done, token_count="SUCCEEDED", summary="SUCCEEDED"),
+    ]
+    # Fields that never reach a provider, by name; the response reports the same.
+    assert events[2]["redacted_fields"] == ["email", "personal_id", "review_note", "secret"]
+    assert body["redacted_fields"] == events[2]["redacted_fields"]
+    assert [usage["provider"] for usage in events[7]["usage"]] == ["openai", "openai"]
+    assert events[7]["model"] == "gpt-6-luna"
+    assert body["usage"] == events[4]["usage"] + events[7]["usage"]
+    assert body["audit_event_ids"] == [event["event_id"] for event in events]
 
 
 @pytest.mark.usefixtures("active_config")
@@ -195,7 +222,9 @@ def test_audit_counts_every_document_adapter_call(
 
     events = admin_events(client, headers)
     started = [e for e in events if e["adapter_calls"]["document_read"] == "STARTED"]
-    finished = [e for e in events if e["adapter_calls"]["document_read"] == "SUCCEEDED"]
+    finished = {
+        e["request_id"] for e in events if e["adapter_calls"]["document_read"] == "SUCCEEDED"
+    }
     assert len(started) == len(finished) == client.app.state.documents.read_count == 3
 
 

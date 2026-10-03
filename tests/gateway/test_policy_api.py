@@ -328,7 +328,11 @@ def test_audit_counts_masked_entities_without_values(
 ) -> None:
     body = execute("reviewer-a", new_task("reviewer-a"), "documents.read", document_id="doc-a")
 
-    [*_, event] = events_of(client, headers, body.json()["request_id"])
+    [event] = [
+        event
+        for event in events_of(client, headers, body.json()["request_id"])
+        if event["control_id"] == "redaction"
+    ]
     assert event["redacted_entity_counts"] == {
         "EMAIL_ADDRESS": 1,
         "IBAN_CODE": 1,
