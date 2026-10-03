@@ -1,0 +1,52 @@
+[project]
+name = "controlproof"
+version = "0.1.0"
+description = "ControlProof: an AI control layer for access, redaction, semantic checks, budgets and audit."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "en-core-web-sm",
+    "fastapi>=0.142.2",
+    "httpx>=0.28.1",
+    "openai>=3.24.0",
+    "pl-core-news-sm",
+    "presidio-analyzer>=2.2.364",
+    "presidio-anonymizer>=2.2.364",
+    "pydantic>=2.13.5",
+    "spacy>=3.8.16",
+    "uvicorn>=0.54.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
+pl-core-news-sm = { url = "https://github.com/explosion/spacy-models/releases/download/pl_core_news_sm-3.8.0/pl_core_news_sm-3.8.0-py3-none-any.whl" }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S608"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--strict-markers"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "live: calls paid external providers (TypeSafe Jev, OpenAI); run only via make test-live",
+]

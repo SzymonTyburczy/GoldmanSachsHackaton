@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ControlProof</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="page-header">
+    <h1>ControlProof</h1>
+    <p class="subtitle">AI control layer &middot; operator panel</p>
+  </header>
+
+  <main>
+    <section class="card" aria-labelledby="health-title">
+      <div class="card-header">
+        <h2 id="health-title">Service health</h2>
+        <span id="health-status" class="badge" data-state="pending">Checking&hellip;</span>
+      </div>
+      <dl class="facts">
+        <div><dt>Database</dt><dd id="health-database">&ndash;</dd></div>
+        <div><dt>Policy version</dt><dd id="health-policy">&ndash;</dd></div>
+        <div><dt>Feed version</dt><dd id="health-feed">&ndash;</dd></div>
+        <div><dt>Protected operations</dt><dd id="health-protected">&ndash;</dd></div>
+      </dl>
+      <p class="muted">Last checked: <span id="health-checked">never</span></p>
+    </section>
+
+    <section class="card" aria-labelledby="planned-title">
+      <h2 id="planned-title">Not built yet</h2>
+      <p class="muted">
+        These panel sections have no backend yet and are not shown as working controls.
+      </p>
+      <ul class="planned">
+        <li>Request form and live control state</li>
+        <li>Policy and feed editor</li>
+        <li>Decision history and audit export</li>
+        <li>Budget: spent, reserved, remaining</li>
+        <li>Latest test report</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

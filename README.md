@@ -2,7 +2,20 @@
 
 Warstwa kontroli pomiędzy aplikacją/agentem a dokumentami i modelami AI. Sprawdza dostęp, usuwa wskazane dane wrażliwe, wykrywa podejrzane instrukcje, ogranicza zużycie i zapisuje wynik każdej operacji.
 
-**Stan na 3.10.2026:** dokumentacja wykonawcza; implementacja i wyniki testów jeszcze nie powstały. Plan dotyczy **dwóch osób**. Polecenia uruchomienia opisane w dokumentacji są celem do zaimplementowania.
+**Stan na 3.10.2026:** ukończony krok A1, czyli szkielet aplikacji. Działają `GET /health`, wspólne kontrakty, schemat SQLite i panel ze stanem serwera. Pozostałe endpointy walidują wejście i odpowiadają `501 NOT_IMPLEMENTED`; żadna kontrola ani adapter jeszcze nie działa. Plan dotyczy **dwóch osób**.
+
+## Uruchomienie
+
+Wymagane: [uv](https://docs.astral.sh/uv/) i dostęp do internetu przy pierwszej instalacji. uv pobiera Pythona 3.12, pakiety i modele spaCy według `uv.lock`.
+
+```bash
+make setup   # uv sync --locked, .env z .env.example (jeśli brak), lokalna baza
+make dev     # API i panel: http://127.0.0.1:8000
+make check   # Ruff
+make test    # testy offline; sieć do TypeSafe i OpenAI jest zablokowana
+```
+
+`make test-live`, `make verify`, `make benchmark`, `make reload-config` i `make reset-demo` jeszcze nie istnieją. Kończą się błędem, żeby nie udawały udanej weryfikacji.
 
 ## Czytaj w tej kolejności
 
