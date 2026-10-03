@@ -159,9 +159,3 @@ def test_missing_token_never_reaches_the_adapter(
 
     assert response.status_code == 401
     assert adapter(client).read_count == 0
-
-
-def test_artifacts_are_not_built(client: TestClient, new_task: NewTask, execute: Execute) -> None:
-    response = execute("admin", new_task("admin"), "artifacts.admit", artifact_id="artifact-1")
-
-    assert response.status_code == 501

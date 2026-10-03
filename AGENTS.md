@@ -9,7 +9,7 @@ Odpowiadaj po polsku, konkretnie. Kod, nazwy API, UI i materiały konkursowe pis
 3. [Plan dwóch osób](docs/PLAN_DWOCH_OSOB.md) — kolejność zadań i odbiór.
 4. [Wspólne ustalenia](docs/WSPOLNE_USTALENIA.md) — obowiązujące kontrakty i technologie.
 
-Na 3.10.2026 repo zawiera kroki A1–A4 oraz moduły B2–B4: kontrakty, schemat SQLite, `/health`, panel, tokeny demo, zadania, `documents.read` z kontrolą dostępu, wersjonowaną politykę z `config/`, redakcję przez lokalne Presidio i własną regułę sekretów, audyt z historią i eksportem, adaptery Jev/Luna, rezerwacje budżetu i ceny. Od A5 gateway wywołuje Jev (także przy `documents.read`) i Lunę przez rezerwacje budżetu, z idempotencją i limitami żądań. Feed, artefakty i wyniki testów live jeszcze nie działają; ich endpointy odpowiadają `501`. Sprawdź aktualny stan przed kodowaniem. Planowane komendy i struktura katalogów nie są dowodem ich istnienia.
+Na 3.10.2026 repo zawiera kroki A1–A6 oraz moduły B2–B4: kontrakty, schemat SQLite, `/health`, panel, tokeny demo, zadania, `documents.read` z kontrolą dostępu, wersjonowaną politykę z `config/`, redakcję przez lokalne Presidio i własną regułę sekretów, audyt z historią i eksportem, adaptery Jev/Luna, rezerwacje budżetu i ceny. Od A5 gateway wywołuje Jev (także przy `documents.read`) i Lunę przez rezerwacje budżetu, z idempotencją i limitami żądań. Od A6 działają `artifacts.admit` z feedem, `/admin/feed`, `/admin/metrics`, `/admin/test-results` i panel operatora; żadna trasa nie odpowiada już `501`. Sprawdź aktualny stan przed kodowaniem. Planowane komendy i struktura katalogów nie są dowodem ich istnienia.
 
 ## Decyzje zespołu
 

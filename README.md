@@ -2,7 +2,7 @@
 
 Warstwa kontroli pomiędzy aplikacją/agentem a dokumentami i modelami AI. Sprawdza dostęp, usuwa wskazane dane wrażliwe, wykrywa podejrzane instrukcje, ogranicza zużycie i zapisuje wynik każdej operacji.
 
-**Stan na 3.10.2026:** ukończone kroki A1 (szkielet), A2 (tożsamość, zadania i dostęp do dokumentów), A3 (audyt) i A4 (polityka i redakcja). Działają: `GET /health`, uwierzytelnienie trzema tokenami demo, tworzenie i odczyt zadań, `documents.read` z kontrolą narzędzia i klienta przed odczytem treści, usuwaniem pól według roli z polityki i maskowaniem PII oraz sekretów (lokalne Presidio i własna reguła), wersjonowana polityka (`GET`/`PUT /admin/policy`, `make reload-config`) oraz audyt każdego kroku z historią zadania, listą zdarzeń i eksportem JSONL. Adaptery Jev i Luna (B2) oraz rezerwacje budżetu (B3) istnieją jako moduły z testami offline; gateway wywoła je w A5 na danych z `prepare_provider_input`. Podsumowanie, artefakty, feed i pozostałe endpointy admina odpowiadają `501 NOT_IMPLEMENTED`. Plan dotyczy **dwóch osób**.
+**Stan na 3.10.2026:** ukończone kroki A1–A6. Działają: `GET /health`, uwierzytelnienie trzema tokenami demo, zadania, `documents.read` i `documents.summarize` (kontrola dostępu przed odczytem, redakcja przez lokalne Presidio i regułę sekretów, Jev, Luna, rezerwacje budżetu, idempotencja i limity), `artifacts.admit` (manifest SHA-256, feed, ścisły schemat JSON), wersjonowana polityka i feed (`GET`/`PUT /admin/policy`, `/admin/feed`, `make reload-config`), audyt z historią i eksportem JSONL, `/admin/metrics`, `/admin/test-results` oraz panel operatora pod `/`. `make test` nie zapisuje raportu, więc panel pokazuje tylko raporty `make test-live` i `make benchmark`. Plan dotyczy **dwóch osób**.
 
 ## Uruchomienie
 

@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import budget, db
+from app.adapters.artifacts import ArtifactManifest, ArtifactStore
 from app.adapters.documents import DocumentAdapter, DocumentCatalog
 from app.adapters.providers import Providers
 from app.api import admin, health, v1
@@ -90,11 +91,16 @@ def create_app(settings: Settings | None = None, providers: Providers | None = N
 
     app = FastAPI(title="ControlProof", version="0.1.0", lifespan=lifespan, telemetry=TELEMETRY_OFF)
     app.state.settings = settings
-    # Weak or duplicated demo tokens and an invalid document catalog stop startup.
+    # Weak or duplicated demo tokens, an invalid document catalog or artifact manifest
+    # stop startup.
     app.state.tokens = TokenDirectory.from_settings(settings)
     catalog = DocumentCatalog.load(settings.documents_dir)
+    manifest = ArtifactManifest.load(settings.artifacts_dir)
     app.state.documents = DocumentAdapter(settings.documents_dir)
-    app.state.gateway = Gateway(settings, catalog, app.state.documents, providers)
+    app.state.artifacts = ArtifactStore(settings.artifacts_dir)
+    app.state.gateway = Gateway(
+        settings, catalog, app.state.documents, manifest, app.state.artifacts, providers
+    )
 
     @app.middleware("http")
     async def request_context(

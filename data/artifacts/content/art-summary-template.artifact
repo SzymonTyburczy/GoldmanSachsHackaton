@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "artifact_id": "art-summary-template",
+  "kind": "prompt_template",
+  "title": "Client summary template",
+  "body": "Summarize the authorized client record in three neutral sentences. Do not include contact details."
+}

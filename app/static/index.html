@@ -3,44 +3,229 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ControlProof</title>
+  <title>ContrAl</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
-  <header class="page-header">
-    <h1>ControlProof</h1>
-    <p class="subtitle">AI control layer &middot; operator panel</p>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="wordmark" aria-label="ContrAl">ContrAl</span>
+        <span class="brand-sub">AI control layer</span>
+      </div>
+      <dl class="health" aria-label="Service health">
+        <div><dt>Service</dt><dd><span id="health-status" class="badge" data-tone="muted">Checking</span></dd></div>
+        <div><dt>Policy</dt><dd id="health-policy" class="faint">&mdash;</dd></div>
+        <div><dt>Feed</dt><dd id="health-feed" class="faint">&mdash;</dd></div>
+        <div><dt>Protected operations</dt><dd id="health-protected" class="faint">&mdash;</dd></div>
+      </dl>
+    </div>
   </header>
 
-  <main>
-    <section class="card" aria-labelledby="health-title">
-      <div class="card-header">
-        <h2 id="health-title">Service health</h2>
-        <span id="health-status" class="badge" data-state="pending">Checking&hellip;</span>
+  <main class="page">
+    <section class="signin card" aria-labelledby="signin-title">
+      <div class="card-head">
+        <div>
+          <h2 id="signin-title" class="card-title">Session</h2>
+          <p class="card-desc" id="signin-state">Not signed in. The token stays in this tab's memory only.</p>
+        </div>
+        <button type="button" id="signout" class="btn btn-ghost btn-sm" hidden>Sign out</button>
       </div>
-      <dl class="facts">
-        <div><dt>Database</dt><dd id="health-database">&ndash;</dd></div>
-        <div><dt>Policy version</dt><dd id="health-policy">&ndash;</dd></div>
-        <div><dt>Feed version</dt><dd id="health-feed">&ndash;</dd></div>
-        <div><dt>Protected operations</dt><dd id="health-protected">&ndash;</dd></div>
-      </dl>
-      <p class="muted">Last checked: <span id="health-checked">never</span></p>
+      <form id="signin-form" class="card-body row-form" autocomplete="off">
+        <label class="field grow">
+          <span class="field-label">Demo bearer token</span>
+          <input id="token" class="input" type="password" spellcheck="false"
+                 placeholder="Paste a token from .env" required minlength="32" maxlength="256">
+          <span class="field-hint">CONTROLPROOF_TOKEN_ANALYST_A, _REVIEWER_A or _ADMIN</span>
+        </label>
+        <button type="submit" class="btn btn-primary">Sign in</button>
+      </form>
     </section>
 
-    <section class="card" aria-labelledby="planned-title">
-      <h2 id="planned-title">Not built yet</h2>
-      <p class="muted">
-        These panel sections have no backend yet and are not shown as working controls.
-      </p>
-      <ul class="planned">
-        <li>Request form and live control state</li>
-        <li>Policy and feed editor</li>
-        <li>Decision history and audit export</li>
-        <li>Budget: spent, reserved, remaining</li>
-        <li>Latest test report</li>
-      </ul>
-    </section>
+    <div class="grid" id="workspace" hidden>
+      <div class="col">
+        <section class="card" aria-labelledby="request-title">
+          <div class="card-head">
+            <div>
+              <h2 id="request-title" class="card-title">Request</h2>
+              <p class="card-desc">Every request, typed or from a demo button, goes to <code>POST /v1/execute</code>.</p>
+            </div>
+          </div>
+          <div class="card-body stack">
+            <div class="row-form">
+              <label class="field">
+                <span class="field-label">Client</span>
+                <select id="task-client" class="input">
+                  <option value="client-a">client-a</option>
+                  <option value="client-b">client-b</option>
+                </select>
+              </label>
+              <button type="button" id="new-task" class="btn btn-secondary">New task</button>
+              <div class="field grow">
+                <span class="field-label">Task</span>
+                <span id="task-id" class="mono faint value-line">&mdash;</span>
+              </div>
+            </div>
+
+            <form id="request-form" class="stack" autocomplete="off">
+              <div class="row-form">
+                <label class="field">
+                  <span class="field-label">Tool</span>
+                  <select id="tool" class="input">
+                    <option value="documents.read">documents.read</option>
+                    <option value="documents.summarize">documents.summarize</option>
+                    <option value="artifacts.admit">artifacts.admit</option>
+                  </select>
+                </label>
+                <label class="field grow" id="target-field">
+                  <span class="field-label" id="target-label">Document ID</span>
+                  <input id="target" class="input mono" list="target-options" required
+                         maxlength="64" spellcheck="false" value="doc-a">
+                  <datalist id="target-options"></datalist>
+                </label>
+              </div>
+              <label class="field" id="prompt-field" hidden>
+                <span class="field-label">Prompt</span>
+                <textarea id="prompt" class="input textarea" rows="3" maxlength="8000"
+                          spellcheck="false">Summarize this company in three sentences.</textarea>
+                <span class="field-hint">Masked by Presidio and the secret rule before Jev or Luna see it.</span>
+              </label>
+              <div class="actions">
+                <button type="submit" id="run" class="btn btn-accent">Run request</button>
+                <span id="run-hint" class="field-hint"></span>
+              </div>
+            </form>
+
+            <div>
+              <p class="section-label">Demo scenarios</p>
+              <div class="chips" id="demos"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="result-title">
+          <div class="card-head">
+            <div>
+              <h2 id="result-title" class="card-title">Control state</h2>
+              <p class="card-desc">Decision, adapters that ran and the audit trail of the last request.</p>
+            </div>
+          </div>
+          <div class="card-body result">
+            <div class="orb-wrap">
+              <div class="orb" id="orb" data-state="idle" aria-hidden="true"></div>
+              <p class="orb-caption" id="orb-caption" role="status" aria-live="polite">Idle</p>
+            </div>
+            <div class="result-main" id="result" aria-live="polite">
+              <div class="empty">
+                <p class="empty-title">No request yet</p>
+                <p class="empty-desc">Run a request or a demo scenario to see each control's decision.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="history-title">
+          <div class="card-head">
+            <div>
+              <h2 id="history-title" class="card-title">History</h2>
+              <p class="card-desc" id="history-desc">Audit events, newest first. Refreshed every 2 s.</p>
+            </div>
+            <button type="button" id="export" class="btn btn-secondary btn-sm" hidden>Download audit (JSONL)</button>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Time</th><th>Request</th><th>Tool</th><th>Control</th><th>Stage</th><th>Decision</th><th>Reason</th><th>Adapter</th><th>ms</th></tr>
+              </thead>
+              <tbody id="history"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div class="col" id="admin-col" hidden>
+        <section class="card" aria-labelledby="budget-title">
+          <div class="card-head">
+            <div>
+              <h2 id="budget-title" class="card-title">Budget</h2>
+              <p class="card-desc">Global nUSD balance of the active policy. 1 USD = 10<sup>9</sup> nUSD.</p>
+            </div>
+          </div>
+          <div class="card-body stack" id="budget">
+            <p class="faint">&mdash;</p>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="controls-title">
+          <div class="card-head">
+            <div>
+              <h2 id="controls-title" class="card-title">Controls</h2>
+              <p class="card-desc">From the active policy and the audit log.</p>
+            </div>
+          </div>
+          <div class="card-body stack" id="controls">
+            <p class="faint">&mdash;</p>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="config-title">
+          <div class="card-head">
+            <div>
+              <h2 id="config-title" class="card-title">Configuration</h2>
+              <p class="card-desc">The server validates the whole document; an invalid one leaves the active version in force.</p>
+            </div>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Configuration">
+            <button type="button" role="tab" id="tab-policy" class="tab" aria-selected="true" aria-controls="panel-config" data-kind="policy">Policy</button>
+            <button type="button" role="tab" id="tab-feed" class="tab" aria-selected="false" aria-controls="panel-config" data-kind="feed" tabindex="-1">Threat feed</button>
+          </div>
+          <div class="card-body stack" id="panel-config" role="tabpanel" aria-labelledby="tab-policy">
+            <form id="feed-rule-form" class="stack" hidden autocomplete="off">
+              <p class="section-label">Block an artifact by SHA-256</p>
+              <div class="row-form">
+                <label class="field grow">
+                  <span class="field-label">SHA-256</span>
+                  <input id="rule-hash" class="input mono" required pattern="[0-9a-f]{64}" maxlength="64" spellcheck="false" placeholder="64 lowercase hex characters">
+                </label>
+              </div>
+              <div class="row-form">
+                <label class="field grow">
+                  <span class="field-label">Reason</span>
+                  <input id="rule-reason" class="input" required maxlength="120" value="Blocked by security team">
+                </label>
+                <button type="submit" class="btn btn-primary">Add rule</button>
+              </div>
+            </form>
+            <label class="field">
+              <span class="field-label" id="config-label">Active policy</span>
+              <textarea id="config-text" class="input textarea mono" rows="14" spellcheck="false"></textarea>
+              <span class="field-hint" id="config-hint">&mdash;</span>
+            </label>
+            <ul class="errors" id="config-errors" role="alert"></ul>
+            <div class="actions">
+              <button type="button" id="config-save" class="btn btn-primary">Validate and activate</button>
+              <button type="button" id="config-reload" class="btn btn-ghost">Discard changes</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="tests-title">
+          <div class="card-head">
+            <div>
+              <h2 id="tests-title" class="card-title">Test results</h2>
+              <p class="card-desc">Newest saved report of each kind. Opening this panel never runs tests.</p>
+            </div>
+          </div>
+          <div class="card-body stack" id="tests">
+            <p class="faint">&mdash;</p>
+          </div>
+        </section>
+      </div>
+    </div>
   </main>
+
+  <div class="toast-region" id="toasts" aria-live="polite"></div>
 </body>
 </html>
