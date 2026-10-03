@@ -334,6 +334,38 @@ async def test_luna_count_failure_blocks_summary_and_keeps_uncertainty(db_path: 
 
 
 @pytest.mark.asyncio
+async def test_luna_summary_failure_keeps_generation_reservation_unknown(
+    db_path: Path,
+) -> None:
+    context = _setup(db_path)
+    adapter = FakeLuna(summary_error=TimeoutError("provider timeout"))
+
+    with pytest.raises(TimeoutError):
+        await summarize_with_budget(
+            db_path=db_path,
+            context=context,
+            adapter=adapter,  # type: ignore[arg-type]
+            input="synthetic",
+            limits=_limits(),
+            pricing=DEFAULT_PRICING,
+            max_input_tokens=8192,
+            max_output_tokens=128,
+        )
+
+    assert adapter.count_calls == 1
+    assert adapter.summary_calls == 1
+    with closing(db.connect(db_path)) as conn:
+        states = [
+            row["state"]
+            for row in conn.execute("SELECT state FROM reservations ORDER BY created_at")
+        ]
+    assert states == [ReservationState.SETTLED.value, ReservationState.UNKNOWN.value]
+    assert balances(db_path, unit=BudgetUnit.NUSD, task_id=TASK_ID, principal_id=PRINCIPAL)[
+        "global"
+    ] == {"spent": 0, "reserved": 74_625}
+
+
+@pytest.mark.asyncio
 async def test_luna_input_token_limit_stops_before_generation(db_path: Path) -> None:
     context = _setup(db_path)
     adapter = FakeLuna(token_count=100)
