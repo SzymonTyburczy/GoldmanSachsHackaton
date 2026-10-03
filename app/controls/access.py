@@ -61,6 +61,33 @@ def check_tool(policy: Policy, context: RequestContext, tool: Tool) -> ControlRe
     return _allow(stage)
 
 
+def check_replay(
+    policy: Policy, stored: Policy | None, context: RequestContext, tool: Tool
+) -> ControlResult:
+    """A stored response is handed out again only within the role's current rights.
+
+    The tool must still be allowed. If the policy changed since the response was stored
+    (``stored`` is that policy, ``None`` if it cannot be loaded), the role's field scope
+    must not have narrowed: the fields a read returns, or the outbound fields a summary
+    was written from. The text of a summary cannot be filtered field by field, so a
+    narrower scope refuses the whole response. Nothing is executed again.
+    """
+    tool_access = check_tool(policy, context, tool)
+    if tool_access.decision is Decision.DENY or stored is policy or tool is Tool.ARTIFACTS_ADMIT:
+        return tool_access
+    if stored is None:
+        return _result(Decision.DENY, ReasonCode.TOOL_FORBIDDEN, tool_access.stage)
+    if tool is Tool.DOCUMENTS_READ:
+        narrowed = not stored.fields_for(context.role) <= policy.fields_for(context.role)
+    else:
+        narrowed = not stored.outbound_fields_for(context.role) <= policy.outbound_fields_for(
+            context.role
+        )
+    if narrowed:
+        return _result(Decision.DENY, ReasonCode.TOOL_FORBIDDEN, tool_access.stage)
+    return tool_access
+
+
 def check_document(context: RequestContext, document: CatalogEntry | None) -> ControlResult:
     """The document must be in the trusted catalog and belong to the task's client.
 

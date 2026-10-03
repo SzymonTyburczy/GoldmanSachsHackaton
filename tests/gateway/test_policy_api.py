@@ -245,6 +245,7 @@ def test_one_request_uses_the_version_pinned_at_admission(
 def test_invalid_stored_policy_stops_protected_operations(
     client: TestClient, headers: Headers, db_path: Path, new_task: NewTask, execute: Execute
 ) -> None:
+    task_id = new_task("analyst-a")
     body = json.dumps({"schema_version": 1})
     with closing(sqlite3.connect(db_path, autocommit=True)) as conn:
         conn.execute(
@@ -254,7 +255,7 @@ def test_invalid_stored_policy_stops_protected_operations(
         )
         conn.execute("UPDATE active_config SET version = 2 WHERE kind = 'policy'")
 
-    response = execute("analyst-a", new_task("analyst-a"), "documents.read", document_id="doc-a")
+    response = execute("analyst-a", task_id, "documents.read", document_id="doc-a")
 
     assert response.status_code == 503
     assert response.json()["reason_code"] == "INVALID_CONFIG"

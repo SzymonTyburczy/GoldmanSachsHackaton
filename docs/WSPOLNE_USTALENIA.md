@@ -100,7 +100,7 @@ flowchart LR
 
 Diagram pokazuje ogólną zasadę. Podsumowanie wymaga wcześniej odczytania dozwolonego dokumentu; jego dokładny przebieg:
 
-1. Ogranicz body do 32 KiB. Uwierzytelnij token, sprawdź schemat i przypisz `request_id`.
+1. Ogranicz body do 32 KiB (`/admin/*`: 256 KiB) przed parsowaniem, licząc faktycznie odebrane bajty, nie tylko `Content-Length` (`app/api/body_limit.py`, `413 INPUT_TOO_LARGE`). Uwierzytelnij token, sprawdź schemat i przypisz `request_id`.
 2. Pobierz zadanie, jego właściciela, klienta i kontekst agenta z serwera. Przypnij aktywną wersję polityki/feedu. Atomowo zajmij limit żądania i równoległości.
 3. Sprawdź narzędzie, dozwolony model, zakres zadania i właściciela dokumentu w zaufanym katalogu. Twarda odmowa kończy ścieżkę przed odczytem treści i zewnętrznymi modelami.
 4. Pobierz dozwolony dokument. Odfiltruj pola według roli i reguł wyjścia. Presidio maskuje PII w dokumencie i prompcie; własna reguła usuwa sekret. Dopiero oczyszczone dane mogą trafić do Jev lub OpenAI.
@@ -122,7 +122,7 @@ Chronimy podłączone adaptery. Model/klient nie ma kluczy TypeSafe ani OpenAI, 
 - **Podsumowanie.** Liczenie tokenów i generowanie dostają to samo wejście. Błąd liczenia: `TOKEN_COUNT_UNAVAILABLE`; za dużo tokenów: `INPUT_TOO_LARGE`; odmowa/niepełna odpowiedź Luny: `UPSTREAM_FAILED` (`FAILED`); timeout: `UPSTREAM_TIMEOUT` (`UNKNOWN`). Wynik przechodzi regułę sekretów i Presidio (`redaction/post_output`).
 - **Limity rezerwacji.** Przypięte, obniżone do aktywnej polityki, jeśli admin zmienił ją w trakcie żądania; `limit_version` to wersja aktywna. Start serwera wywołuje `budget.reconcile_after_restart`.
 - **Odpowiedź.** `usage` zawiera wszystkie wywołania dostawców, także przy `DENY`.
-- **Ograniczenia.** Rezerwacje `UNKNOWN` trzymają slot wywołania dostawcy; przy `max_concurrency_per_principal=2` dwa timeouty blokują użytkownika do ręcznego uzgodnienia, którego nie ma. `review_note` widziany przez reviewera nie przechodzi przez Jev. Limit body 32 KiB nie jest zbudowany.
+- **Ograniczenia.** Rezerwacje `UNKNOWN` trzymają slot wywołania dostawcy; przy `max_concurrency_per_principal=2` dwa timeouty blokują użytkownika do ręcznego uzgodnienia, którego nie ma. `review_note` widziany przez reviewera nie przechodzi przez Jev.
 
 ## 4. Wspólne kontrakty danych
 
@@ -146,7 +146,7 @@ Chronimy podłączone adaptery. Model/klient nie ma kluczy TypeSafe ani OpenAI, 
 
 W przykładzie `task_id` należy zastąpić identyfikatorem zwróconym przez `POST /v1/tasks`. Dozwolone narzędzia i argumenty: `documents.read` (`document_id`), `documents.summarize` (`document_id`, `prompt`, maks. 8000 znaków), `artifacts.admit` (`artifact_id`). Nie przyjmujemy dowolnej ścieżki pliku, URL, SQL, modelu ani roli od klienta.
 
-Ten sam klucz idempotencji dla tego samego użytkownika i identycznego żądania nie wykonuje ponownie adapterów: zwraca zakończony wynik lub informację o trwającym/niepewnym wykonaniu. Zmieniona treść pod tym samym kluczem daje `409`. Stan jest trwały w SQLite; zapisany wynik jest już po redakcji i dostępny tylko właścicielowi/adminowi.
+Ten sam klucz idempotencji dla tego samego użytkownika i identycznego żądania nie wykonuje ponownie adapterów: zwraca zakończony wynik lub informację o trwającym/niepewnym wykonaniu. Zmieniona treść pod tym samym kluczem daje `409`. Stan jest trwały w SQLite; zapisany wynik jest już po redakcji i dostępny tylko właścicielowi/adminowi. Zapisany wynik (inny niż `DENY`) jest wydawany tylko w obecnych prawach: aktywna polityka musi nadal dopuszczać narzędzie roli, a jeżeli polityka zmieniła się od zapisu, zakres pól roli nie może być węższy (pola `documents.read`, pola `outbound_fields` dla podsumowania, którego tekstu nie da się filtrować polami). Zapisany `artifacts.admit` nie jest wydawany, gdy aktywny feed blokuje już jego skrót. Odmowa (`DENY TOOL_FORBIDDEN` lub `ARTIFACT_BLOCKED`) trafia do audytu, ale nie jest zapisywana i nic nie jest wykonywane ponownie; po przywróceniu praw ten sam klucz znów zwraca zapisany wynik.
 
 | Typ | Wymagane pola / znaczenie |
 |---|---|
@@ -250,7 +250,7 @@ Minimalna zawartość polityki, do zapisania w JSON podczas A4:
 | `resources.max_requests_per_task` | `20` |
 | `resources.max_provider_calls_per_task` | `40`, łącznie liczenie tokenów, detekcja i podsumowanie |
 | `resources.max_concurrency_per_principal` | `2` żądania aplikacyjne w toku |
-| `resources.max_tasks_per_principal` | `10` w jednej bazie demo; nowy task nie zeruje limitów nadrzędnych |
+| `resources.max_tasks_per_principal` | `10` w jednej bazie demo, liczone ze wszystkimi dotychczasowymi zadaniami (bez archiwizacji; nowa baza przez reset demo). Sprawdzane atomowo przy `POST /v1/tasks`: nadmiarowe zadanie dostaje `429 BUDGET_EXCEEDED` i nie jest zapisywane, więc nie blokuje wcześniejszych. Bez poprawnej aktywnej polityki `503 INVALID_CONFIG`. Nowy task nie zeruje limitów nadrzędnych |
 | `resources.max_requests_per_minute_per_principal` | `30` |
 | `budget.task_limit_nusd` | `50000000` = 0,05 USD |
 | `budget.principal_limit_nusd` | `200000000` = 0,20 USD |

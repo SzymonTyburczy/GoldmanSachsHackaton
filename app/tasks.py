@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID, uuid4
 
+from app import policy
 from app.auth import Principal
 from app.contracts import TaskResponse, utc_now
-from app.db import to_db_time
+from app.db import to_db_time, transaction
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,8 +33,42 @@ class Task:
         )
 
 
+class TaskLimitReached(Exception):
+    """The principal already has ``max_tasks_per_principal`` tasks."""
+
+
+class NoActivePolicy(Exception):
+    """No valid policy is active, so the task limit is unknown."""
+
+
 def create_task(conn: sqlite3.Connection, principal: Principal, client_id: str) -> Task:
-    """Insert a task for ``principal``. The caller has already checked the client scope."""
+    """Insert a task for ``principal``. The caller has already checked the client scope.
+
+    ``resources.max_tasks_per_principal`` of the active policy counts every task of the
+    principal in this database, as ``app.budget`` does for reservations. The active
+    policy, the count and the insert share one write transaction, so neither parallel
+    requests nor a policy change in between can pass the limit. A refused task is never
+    stored, so it cannot block the tasks accepted before it. Tasks are not closed or
+    archived; ``make reset-demo`` starts a new demo database.
+    """
+    with transaction(conn):
+        version = policy.active_versions(conn).policy_version
+        try:
+            active = policy.load(conn, "policy", version).document if version else None
+        except policy.StoredConfigError:
+            active = None
+        if not isinstance(active, policy.Policy):
+            raise NoActivePolicy()
+        max_tasks = active.resources.max_tasks_per_principal
+        count = conn.execute(
+            "SELECT count(*) FROM tasks WHERE principal_id = ?", (principal.principal_id,)
+        ).fetchone()[0]
+        if count >= max_tasks:
+            raise TaskLimitReached()
+        return _insert_task(conn, principal, client_id)
+
+
+def _insert_task(conn: sqlite3.Connection, principal: Principal, client_id: str) -> Task:
     task = Task(
         task_id=uuid4(),
         principal_id=principal.principal_id,
