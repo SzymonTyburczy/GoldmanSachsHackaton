@@ -16,7 +16,7 @@ make test    # testy offline; sieć do TypeSafe i OpenAI jest zablokowana
 make reload-config  # walidacja i aktywacja zmienionych config/policy.json i config/threat-feed.json
 ```
 
-`make test-live`, `make verify`, `make benchmark` i `make reset-demo` jeszcze nie istnieją. Kończą się błędem, żeby nie udawały udanej weryfikacji.
+`make test-live`, `make verify` i `make benchmark LIVE=1` wysyłają płatne zapytania do TypeSafe i OpenAI i wymagają lokalnych kluczy; `make benchmark` bez `LIVE=1` mierzy tylko lokalne komponenty. `make reset-demo` jeszcze nie istnieje i kończy się błędem, żeby nie udawał udanej operacji.
 
 API wymaga nagłówka `Authorization: Bearer <token>` z `.env`: `CONTROLPROOF_TOKEN_ANALYST_A`, `CONTROLPROOF_TOKEN_REVIEWER_A` lub `CONTROLPROOF_TOKEN_ADMIN`. Tokenu nie podaje się w URL. `POST /v1/execute` wymaga aktywnej polityki i feedu; `make setup` aktywuje je z `config/`, jeśli baza jeszcze ich nie ma. Później źródłem prawdy jest wersja w bazie: zmiany wprowadza admin przez `PUT /admin/policy` albo `make reload-config`.
 
