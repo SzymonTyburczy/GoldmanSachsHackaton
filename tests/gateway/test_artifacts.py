@@ -1,4 +1,4 @@
-"""artifacts.admit and the threat feed (docs/WSPOLNE_USTALENIA.md, section 6; plan A6).
+"""Artifact admission and the threat feed.
 
 The artifacts are synthetic: inert JSON documents and one non-JSON file with a
 pickle-like header that is never deserialized. The class of threat is CWE-502; these

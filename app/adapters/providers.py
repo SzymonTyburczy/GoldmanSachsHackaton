@@ -1,4 +1,4 @@
-"""Jev and Luna adapters for one request (docs/WSPOLNE_USTALENIA.md, section 2).
+"""Jev and Luna adapters configured for one request.
 
 The gateway is the only caller. Keys come from the server environment; timeouts and the
 output limit come from the policy pinned for the request. A missing key leaves the

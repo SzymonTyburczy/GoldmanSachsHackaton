@@ -1,4 +1,4 @@
-"""Redaction before any output (docs/WSPOLNE_USTALENIA.md, sections 2 and 5).
+"""Redaction before returning data or sending it to providers.
 
 Order for every text that leaves the gateway, to the user or to a provider:
 
@@ -35,7 +35,7 @@ class Redacted:
 
 @dataclass(frozen=True, slots=True)
 class ProviderInput:
-    """Redacted data that may be passed to the Jev and Luna adapters (A5)."""
+    """Redacted data that may be passed to the Jev and Luna adapters."""
 
     document: str  # allowed outbound fields as "name: value" lines
     prompt: str | None
@@ -97,7 +97,7 @@ def prepare_provider_input(
     policy: Policy,
     engine: PiiEngine,
 ) -> ProviderInput:
-    """The only data A5 may give to Jev or OpenAI, including token counting."""
+    """The only data the gateway may give to providers, including token counting."""
     document = redact_fields(fields, policy.outbound_fields_for(role), policy.redaction, engine)
     counts = Counter(document.entity_counts)
     clean_prompt = None

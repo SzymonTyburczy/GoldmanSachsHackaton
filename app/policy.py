@@ -1,4 +1,4 @@
-"""Versioned policy and artifact feed (docs/WSPOLNE_USTALENIA.md, section 6).
+"""Versioned policy and artifact feed.
 
 The files in ``config/`` only seed or import a configuration. After activation the
 version stored in SQLite is the source of truth and survives a restart. Activation
@@ -62,7 +62,7 @@ from app.settings import Settings
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 CONFIG_FILES = {"policy": "policy.json", "feed": "threat-feed.json"}
 
-# The only models the adapters can call (AGENTS.md: no models beyond Jev and Luna).
+# Models supported by the configured provider adapters.
 SUPPORTED_MODELS = {JEV_MODEL: Provider.TYPESAFE, LUNA_MODEL: Provider.OPENAI}
 # Removed in every profile; a policy cannot show them to a role or send them out.
 ALWAYS_REMOVED_FIELDS = frozenset({"email", "personal_id", "secret"})

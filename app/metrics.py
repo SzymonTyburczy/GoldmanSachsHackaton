@@ -1,4 +1,4 @@
-"""Read-only counters for ``GET /admin/metrics`` (docs/WSPOLNE_USTALENIA.md, section 8).
+"""Read-only counters for ``GET /admin/metrics``.
 
 Every number comes from the same tables the gateway writes: ``audit_events``,
 ``requests``, ``budget_accounts`` and ``reservations``. Nothing is estimated here: there

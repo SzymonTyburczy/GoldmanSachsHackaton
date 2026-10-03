@@ -1,4 +1,4 @@
-"""Append-only audit log (docs/WSPOLNE_USTALENIA.md, sections 4 and 8).
+"""Append-only audit log.
 
 Every stored event is a validated ``AuditEvent``: identifiers, enums, field names,
 entity counts and provider usage. The model has no field for request bodies, prompts,

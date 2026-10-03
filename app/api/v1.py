@@ -1,4 +1,4 @@
-"""Client API (docs/WSPOLNE_USTALENIA.md, sections 4–5).
+"""Client API for owned tasks, tool execution and task history.
 
 Every route needs a demo bearer token. The identity, role and client scope come from
 the server-side directory in ``app.auth``; tasks record their owner and client.

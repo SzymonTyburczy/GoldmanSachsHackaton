@@ -1,4 +1,4 @@
-"""Gateway pipeline for ``POST /v1/execute`` (docs/WSPOLNE_USTALENIA.md, section 3).
+"""Gateway pipeline for ``POST /v1/execute``.
 
 Steps for documents, with an audit event at every step:
 
@@ -18,7 +18,7 @@ Steps for documents, with an audit event at every step:
 Every provider call follows its reservation and is preceded by its intent record. It is
 bounded by the policy timeout. ``documents.read`` ends after the detector. Budget limits
 for each reservation are the pinned ones, lowered if an admin has activated lower limits
-since (section 6).
+since.
 
 ``artifacts.admit`` calls no model: after the role's tools and the manifest, the bytes are
 read once, at most 64 KiB, and ``app.controls.artifacts`` checks their digest against the
@@ -599,7 +599,7 @@ class Gateway:
         self, trail: RequestTrail, context: RequestContext, pinned: Policy, stage: Stage
     ) -> BudgetLimits | ExecuteResponse:
         """Limits for the next reservation: the pinned policy's, each lowered to the active
-        policy's value if an admin has activated another version since (section 6)."""
+        policy's value if an admin has activated another version since."""
         own = pinned.budget_limits(context.policy_version)
         with closing(db.connect(self._db_path)) as conn:
             version = policy.active_versions(conn).policy_version

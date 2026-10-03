@@ -24,3 +24,13 @@ logs/
 .DS_Store
 .idea/
 .vscode/
+
+# Team notes and local assistant configuration
+/docs/
+/dane_wejsciowe/
+/AGENTS.md
+/CONTRIBUTING.md
+/.claude/
+/.codex/
+/assets/submission/
+/scripts/b1_smoke.py

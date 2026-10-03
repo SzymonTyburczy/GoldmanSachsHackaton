@@ -1,4 +1,4 @@
-"""Local Presidio Analyzer and Anonymizer (docs/WSPOLNE_USTALENIA.md, section 2).
+"""Local Presidio Analyzer and Anonymizer.
 
 Everything runs on this machine. The spaCy pipelines come from the lockfile; a missing
 pipeline is an error here, because Presidio would otherwise try to download it during a

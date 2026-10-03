@@ -1,5 +1,4 @@
 -- ControlProof SQLite schema, version 1 (PRAGMA user_version).
--- Shared file: agree changes with both people before editing (CONTRIBUTING, section 1).
 -- Times are UTC ISO 8601 strings, IDs are UUID strings, amounts and counters are integers.
 -- No table stores request bodies, prompts, documents, access tokens or raw SDK errors.
 
@@ -52,7 +51,6 @@ CREATE INDEX IF NOT EXISTS requests_by_task ON requests (task_id, created_at);
 
 -- Budget balances per scope. Limits come from the active policy at reservation time,
 -- so lowering a limit below spent + reserved blocks new reservations without a CHECK here.
--- Proposal from A1; person 2 finalises the budget tables in B3.
 CREATE TABLE IF NOT EXISTS budget_accounts (
     scope TEXT NOT NULL CHECK (scope IN ('task', 'principal', 'global')),
     scope_id TEXT NOT NULL,         -- task_id, principal_id or 'global'
