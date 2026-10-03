@@ -1,6 +1,6 @@
 # Wspólne ustalenia techniczne
 
-**Wersja 1, 3.10.2026.** Specyfikacja do implementacji dla dwóch osób. Konkretne wybory poniżej zastępują warianty ze starszych planów. Działanie API, dostępność modelu na koncie i osiągi nie zostały jeszcze przetestowane.
+**Wersja 2, 3.10.2026.** Specyfikacja do implementacji dla dwóch osób. Konkretne wybory poniżej zastępują warianty ze starszych planów. Działanie API, dostępność modelu na koncie i osiągi nie zostały jeszcze przetestowane.
 
 Kolejność pracy: [plan](PLAN_DWOCH_OSOB.md). Właściciele plików i sposób wprowadzania zmian: [CONTRIBUTING](../CONTRIBUTING.md).
 
@@ -31,36 +31,50 @@ Zakres podstawowy: dostęp, redakcja, jeden detektor AI, budżet, feed artefakt�
 | Baza | SQLite przez `sqlite3` | Zadania, rezerwacje, audyt i aktywne wersje konfiguracji |
 | Konfiguracja | JSON | `config/policy.json` i `config/threat-feed.json` jako pliki startowe |
 | Panel | HTML/CSS/JavaScript, `fetch` | Statyczne pliki z FastAPI, jeden origin, odświeżanie co 2 s |
-| OpenAI | Oficjalny pakiet Python `openai`, Responses API | Jeden współdzielony adapter; żadnych kluczy w przeglądarce |
+| OpenAI | Oficjalny pakiet Python `openai`, Responses API | Adapter generowania; żadnych kluczy w przeglądarce |
+| Jev | TypeSafe `jev-1.13.0`, HTTPX AsyncClient | Osobny adapter oceny semantycznej |
+| PII | `presidio-analyzer`, `presidio-anonymizer`, spaCy | Analiza i maskowanie lokalnie, przed każdym zewnętrznym API |
 | Pakiety | uv + `pyproject.toml` + `uv.lock` | Wspólny, przypięty zestaw zależności |
 | Testy | pytest, pytest-asyncio, HTTPX | Testy jednostkowe, HTTP, współbieżności i live |
 | Kontrola kodu | Ruff | Formatowanie i lint |
 
 Osoba 1 podczas A1 zapisuje faktycznie zainstalowane wersje w `uv.lock`; osoba 2 sprawdza odtworzenie przez `uv sync --locked`. Nie potrzebujemy osobnego frontendu Node, ORM ani wdrożenia chmurowego do podstawowego demo. Dokumentacja: [FastAPI](https://fastapi.tiangolo.com/), [uv: lockfile](https://docs.astral.sh/uv/concepts/projects/sync/).
 
-### Dwa zastosowania tej samej Luny
+### Podział między Jev, Presidio i Lunę
 
-| Zastosowanie | Model | Ustawienia początkowe zespołu |
+| Zastosowanie | Technologia | Ustawienia początkowe zespołu |
 |---|---|---|
-| Detektor podejrzanych instrukcji | `gpt-6-luna` | `reasoning.effort=low`, `max_output_tokens=1024`, Structured Outputs |
-| Podsumowanie dopuszczonego dokumentu | `gpt-6-luna` | `reasoning.effort=low`, `max_output_tokens=2048`, zwykły tekst |
+| Ocena podejrzanych instrukcji | TypeSafe `jev-1.13.0` | Dwa pytania Noul, próg 0.80, timeout 10 s, brak retry |
+| Wykrywanie PII w tekście | Presidio Analyzer | Lokalny silnik, jawna lista encji i progi |
+| Zastępowanie wykrytych fragmentów | Presidio Anonymizer | Zastąpienie placeholderem, np. `<EMAIL_ADDRESS>` |
+| Podsumowanie dopuszczonego dokumentu | OpenAI `gpt-6-luna` | `reasoning.effort=low`, `max_output_tokens=2048` |
 
-Model obsługuje Responses API i Structured Outputs; identyfikator sprawdzono w [oficjalnej dokumentacji modelu](https://developers.openai.com/api/docs/models/gpt-6-luna). Format odpowiedzi definiujemy przez Pydantic/JSON Schema zgodnie z [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs). Ustawienia tabeli są naszym punktem startowym do pomiaru, nie gwarancją jakości lub czasu.
+Jev zwraca odpowiedzi na pytania o podany tekst. Wybieramy przypięty identyfikator z [katalogu modeli TypeSafe](https://docs.typesafe.ai/models). Wywołanie: `POST https://api.typesafe.ai/v1/systemone` przez HTTPX, z `TYPESAFE_API_KEY`, `state`, `model` i `questions`; kształt opisuje [API TypeSafe](https://docs.typesafe.ai/api). Transport nie ponawia sam wywołania. Wersję odpowiedzi zapisujemy w audycie.
 
-W obu zastosowaniach: `store=false`, timeout 30 s, brak narzędzi dostawcy, streaming wyłączony, `max_retries=0`. Używamy własnego, kompletnego wejścia bez `previous_response_id` i bez ukrytej historii. W SDK użyjcie `AsyncOpenAI`; dla detektora `responses.parse`, dla podsumowania `responses.create`. W pierwszym smoke teście sprawdźcie zgodność tych metod z przypiętym SDK.
+W jednym wywołaniu Jev zadajemy dwa pytania Noul: czy treść próbuje zmienić/ominąć instrukcje oraz czy próbuje wyprowadzić dane poza dozwolony zakres. `state` oddziela oczyszczony prompt, dokument i zaufany opis dozwolonego zadania; instrukcje/criteria pochodzą wyłącznie z serwera. Cytat o ataku nie jest automatycznie atakiem. Reguła gatewaya stosuje progi do ocen i nie oddaje modelowi prawa do zmiany ACL ani budżetu. Taki podział oceny i egzekwowania pokazuje [cookbook guardrails TypeSafe](https://docs.typesafe.ai/cookbooks/llm_guardrails).
 
-Detektor i model podsumowujący mają osobne instrukcje i pomiar zużycia. Nie przekazujemy odpowiedzi detektora jako polecenia do drugiego modelu. `store=false` nie jest obietnicą pełnego braku przechowywania danych u dostawcy; w demo używamy wyłącznie danych syntetycznych.
+Nie przenosimy bez testu deklaracji dostawcy o kalibracji na nasz przypadek. Jev również może ulec manipulacji przez treść; opisuje to [jego dokumentacja ograniczeń](https://docs.typesafe.ai/model-jaggedness/jev-1.13). Nie dodajemy Luny jako drugiego detektora w P0. Ewentualne porównanie obu detektorów jest późniejszym eksperymentem.
 
-Luna w Codex służąca do kodowania jest skonfigurowana według CONTRIBUTING. Nie zmieniamy samoczynnie modelu API na inną rodzinę. Brak dostępu do `gpt-6-luna` jest jawną blokadą do rozwiązania w B1, a nie powodem cichego użycia stubu.
+Luna wyłącznie generuje podsumowanie przez `AsyncOpenAI.responses.create`. Ustawienia: `store=false`, timeout 30 s, `max_retries=0`, brak narzędzi dostawcy, streaming wyłączony. Używamy własnego kompletnego wejścia bez `previous_response_id`. Identyfikator potwierdza [dokumentacja Luny](https://developers.openai.com/api/docs/models/gpt-6-luna). `store=false` nie jest obietnicą pełnego braku przechowywania danych u dostawcy. Oba klucze są tylko w backendzie. Dostęp do modeli na kontach sprawdzamy w B1.
+
+### Presidio: konkretny zakres
+
+Osoba 1 instaluje dwa pakiety Presidio oraz lokalne pipeline'y spaCy: [`en_core_web_sm`](https://spacy.io/models/en) i [`pl_core_news_sm`](https://spacy.io/models/pl). Przypina wersje pakietów/modeli podczas A1/A4. Konfiguruje `NlpEngineProvider`, języki `en`/`pl`, właściwe etykiety NER i rejestr recognizerów; nie zakłada, że konfiguracja angielska zapewnia obsługę polskiego. Instalacja i sprawdzenie modeli odbywają się w setupie, nie podczas żądania.
+
+W P0 wykrywamy `EMAIL_ADDRESS`, `PHONE_NUMBER`, `IBAN_CODE`, `CREDIT_CARD` i `PL_PESEL`, wymienione w [katalogu encji Presidio](https://presidio.dataprivacystack.org/supported_entities/). Rejestrujemy ich obsługę dla obu języków i testujemy syntetyczne przykłady oraz fałszywe alarmy. Wykrywanie imion/nazwisk `PERSON` dopuszczamy dopiero po sprawdzeniu mapowania NER i próbek danego języka.
+
+Najpierw usuwamy pola zabronione dla roli i dostawcy; potem Analyzer wskazuje fragmenty tekstu, a Anonymizer zastępuje je placeholderami. Osobna reguła rozpoznaje nasz syntetyczny sekret/API key. Presidio nie zastępuje ACL, metadanych właściciela ani kontroli sekretów. Nie gwarantuje wykrycia wszystkich danych; dokumentuje to [projekt Presidio](https://presidio.dataprivacystack.org/).
+
+Konfiguracja `redaction` zawiera encje, progi per encja, placeholdery, języki i wersję recognizerów. Awaria silnika lub brak wymaganego modelu blokuje ścieżkę wychodzącą, zamiast przesyłać surowy tekst. Audyt zapisuje typy encji/liczby i wersję konfiguracji, bez wykrytych wartości. Te same reguły stosujemy do promptu, dokumentu i odpowiedzi Luny przed udostępnieniem jej użytkownikowi.
 
 ## 3. Architektura i kolejność kontroli
 
 ```mermaid
 flowchart LR
     C[Panel lub klient HTTP] --> G[Gateway: tożsamość i polityka]
-    G --> R[Kontrole dostępu i danych]
+    G --> R[ACL i lokalne Presidio]
     R --> B[Wspólny limiter i rezerwacje]
-    B --> D[OpenAI Luna: detektor]
+    B --> D[Jev: ocena semantyczna]
     D --> B2[Rezerwacja operacji docelowej]
     B2 --> M[Adapter dokumentu, artefaktu lub Luny]
     M --> O[Filtr odpowiedzi]
@@ -76,16 +90,16 @@ Diagram pokazuje ogólną zasadę. Podsumowanie wymaga wcześniej odczytania doz
 
 1. Ogranicz body do 32 KiB. Uwierzytelnij token, sprawdź schemat i przypisz `request_id`.
 2. Pobierz zadanie, jego właściciela, klienta i kontekst agenta z serwera. Przypnij aktywną wersję polityki/feedu. Atomowo zajmij limit żądania i równoległości.
-3. Sprawdź narzędzie, dozwolony model, zakres zadania i właściciela dokumentu w zaufanym katalogu. Twarda odmowa kończy ścieżkę przed odczytem treści i OpenAI.
-4. Pobierz dozwolony dokument. Odfiltruj pola według roli, usuń wskazane PII/sekrety z dokumentu i promptu. Zastosuj osobną listę pól dopuszczonych do zewnętrznego modelu.
-5. Zamroź przygotowane wejście detektora. Po limitach zasobów policz jego tokeny, zarezerwuj koszt i uruchom detektor. Detektor nie sprawdza rekurencyjnie własnego wywołania.
+3. Sprawdź narzędzie, dozwolony model, zakres zadania i właściciela dokumentu w zaufanym katalogu. Twarda odmowa kończy ścieżkę przed odczytem treści i zewnętrznymi modelami.
+4. Pobierz dozwolony dokument. Odfiltruj pola według roli i reguł wyjścia. Presidio maskuje PII w dokumencie i prompcie; własna reguła usuwa sekret. Dopiero oczyszczone dane mogą trafić do Jev lub OpenAI.
+5. Zamroź przygotowany stan i pytania Jev. Po limitach zasobów zarezerwuj konserwatywną górną granicę kosztu z sekcji 7 i uruchom Jev. Detektor nie sprawdza rekurencyjnie własnego wywołania.
 6. `risk_score >= block_threshold` daje `DENY`. Odmowa modelu, timeout, niepełna odpowiedź i błąd parsowania także blokują dalsze podsumowanie.
 7. Przy dopuszczeniu przygotuj wejście modelu podsumowującego z tych samych dopuszczonych danych. Policz tokeny, zarezerwuj koszt i wywołaj adapter Luny.
 8. Przed zwróceniem odpowiedzi sprawdź ją filtrem PII/sekretów. Rozlicz znane zużycie, zachowaj niepewną rezerwację i zapisz audyt, także przy błędzie.
 
 `documents.read` kończy się po filtrze danych i detektorze, bez modelu podsumowującego. `artifacts.admit` używa walidacji formatu, manifestu i feedu; nie wywołuje AI. Odrębny test budżetu używa testowego adaptera o stałym koszcie.
 
-Chronimy podłączone adaptery. Model/klient nie ma klucza OpenAI, dostępu do plików dokumentów ani publicznego endpointu pomijającego gateway. W MVP adaptery są w procesie serwera: nie deklarujemy izolacji od administratora hosta ani złośliwego kodu z tymi samymi uprawnieniami.
+Chronimy podłączone adaptery. Model/klient nie ma kluczy TypeSafe ani OpenAI, dostępu do plików dokumentów ani publicznego endpointu pomijającego gateway. W MVP adaptery są w procesie serwera: nie deklarujemy izolacji od administratora hosta ani złośliwego kodu z tymi samymi uprawnieniami.
 
 ## 4. Wspólne kontrakty danych
 
@@ -115,10 +129,15 @@ Ten sam klucz idempotencji dla tego samego użytkownika i identycznego żądania
 |---|---|
 | `RequestContext` | `request_id`, `task_id`, `principal_id`, `agent_id`, `role`, `client_id`, `policy_version`, `feed_version`, `created_at`; tworzy serwer, nie klient |
 | `ControlResult` | `control_id`, `decision`, `reason_code`, `stage`, `redacted_fields`; decyzja to `ALLOW`, `DENY` lub `REDACT` |
-| `SemanticResult` | `risk_score` (0–1), `category` (`benign`, `instruction_override`, `data_exfiltration`, `other_suspicious`); wynik modelu walidowany po parsowaniu |
-| `Usage` | `model`, `provider_response_id`, `input_tokens`, `cached_input_tokens`, `output_tokens`, `cost_nusd`, `pricing_version`, `cost_status`; niedostępne wartości to `null`, nie zero |
+| `PiiFinding` | `entity_type`, `start`, `end`, `score`; indeksy w oryginalnym analizowanym tekście, wyłącznie do lokalnego maskowania; bez kopii wykrytej wartości |
+| `SemanticResult` | `instruction_override_probability`, `data_exfiltration_probability` (0–1), `risk_score`, `category` (`benign`, `instruction_override`, `data_exfiltration`); normalizowany wynik Jev |
+| `Usage` | `provider` (`typesafe`/`openai`), `model`, `provider_response_id`, `input_tokens`, `cached_input_tokens`, `output_tokens`, `cost_nusd`, `pricing_version`, `cost_status`; niedostępne wartości to `null`, nie zero |
 | `Reservation` | `reservation_id`, `request_id`, `task_id`, `principal_id`, `purpose` (`detector`/`summary`/`fixture`), `unit`, `amount`, `state`, `created_at`, `pricing_version`, `limit_version` |
 | `AuditEvent` | `event_id`, kontekst identyfikatorów, czas, `control_id`, `decision`, `reason_code`, `stage`, `execution_status`, `adapter_calls`, `usage`, `latency_ms`, `model`, `policy_version`, `feed_version` |
+
+Presidio przekazuje pozycje wykrytych fragmentów bez zmieniania tekstu przed wywołaniem Anonymizera; oba moduły używają tego samego tekstu. Wyniki z różnymi językami i nakładające się fragmenty są łączone według jednej sprawdzonej reguły. Do audytu trafia jedynie typ encji i liczba zastąpień, bez pozycji i wartości. Score recognizera nie jest deklaracją pewnego wykrycia.
+
+Adapter Jev wymaga odpowiedzi na oba pytania, prawidłowego typu `noul` i skończonych wartości 0–1; brak pola/NaN/wartość poza zakresem jest błędem kontroli. `risk_score = max(instruction_override_probability, data_exfiltration_probability)` to agregat do progowania, nie prawdopodobieństwo sumy zdarzeń. Przy wyniku poniżej progu kategoria jest `benign`; przy przekroczeniu wskazuje dominujące pytanie, a remis rozstrzyga stała kolejność z konfiguracji. Noul nie wymaga pola `confidence`.
 
 `SemanticResult` opisuje ocenę tekstu. Nazwę modelu, czas i zużycie dopisuje adapter na podstawie odpowiedzi dostawcy; zachowuje również nazwę żądaną w konfiguracji, jeśli odpowiedź podaje inną wersję. `cost_status` ma wartości `calculated`, `estimated` lub `unknown`; `calculated` oznacza obliczenie z pełnego usage i cennika, nie uzgodnienie faktury. Powód dla UI pochodzi z naszej mapy kategorii i kodów; model nie generuje niekontrolowanej notatki trafiającej do logów.
 
@@ -126,7 +145,7 @@ Ten sam klucz idempotencji dla tego samego użytkownika i identycznego żądania
 
 Wynik API zawiera `schema_version`, `request_id`, `task_id`, `decision`, `reason_code`, `policy_version`, `execution_status`, `adapter_calls`, `output`, `redacted_fields`, `usage`, `audit_event_ids`. Przy `DENY` pole `output=null`; przy redakcji i udanym wykonaniu decyzja końcowa to `REDACT`. `usage` jest listą wywołań; status w wyniku dotyczy narzędzia żądanego przez klienta, szczegóły zależności są w audycie.
 
-Minimalne kody: `OK`, `AUTH_REQUIRED`, `INVALID_INPUT`, `TASK_FORBIDDEN`, `CLIENT_FORBIDDEN`, `MODEL_FORBIDDEN`, `TOOL_FORBIDDEN`, `PII_REDACTED`, `SEMANTIC_RISK`, `DETECTOR_UNAVAILABLE`, `BUDGET_EXCEEDED`, `CONCURRENCY_EXCEEDED`, `INPUT_TOO_LARGE`, `TOKEN_COUNT_UNAVAILABLE`, `ARTIFACT_BLOCKED`, `INVALID_CONFIG`, `UPSTREAM_FAILED`, `UPSTREAM_TIMEOUT`, `AUDIT_UNAVAILABLE`.
+Minimalne kody: `OK`, `AUTH_REQUIRED`, `INVALID_INPUT`, `TASK_FORBIDDEN`, `CLIENT_FORBIDDEN`, `MODEL_FORBIDDEN`, `TOOL_FORBIDDEN`, `PII_REDACTED`, `SEMANTIC_RISK`, `DETECTOR_UNAVAILABLE`, `PII_ENGINE_UNAVAILABLE`, `BUDGET_EXCEEDED`, `CONCURRENCY_EXCEEDED`, `INPUT_TOO_LARGE`, `TOKEN_COUNT_UNAVAILABLE`, `ARTIFACT_BLOCKED`, `INVALID_CONFIG`, `UPSTREAM_FAILED`, `UPSTREAM_TIMEOUT`, `AUDIT_UNAVAILABLE`.
 
 ## 5. API, tożsamości i dane demo
 
@@ -156,7 +175,7 @@ MVP używa trzech losowych tokenów demo z `.env`, mapowanych na tożsamości po
 
 `doc-a` należy do `client-a`, `doc-b` do `client-b`. Metadane są w katalogu serwera. W dokumentach umieszczamy syntetyczny email, identyfikator i sekret testowy. Pola `email`, `personal_id`, `secret` są zawsze usuwane w podstawowym profilu; dodatkowo filtrujemy ich określone wzorce w tekście. To ograniczona kontrola, nie wykrywanie wszystkich możliwych danych osobowych.
 
-Do OpenAI dopuszczamy wyłącznie pola `company_name`, `status`, `notes` i oczyszczony prompt; `review_note` pozostaje poza wysyłką do dostawcy. Dotyczy to także endpointu liczenia tokenów. Wszystkie dane demonstracyjne są fikcyjne.
+Do Jev i OpenAI dopuszczamy wyłącznie pola `company_name`, `status`, `notes` i oczyszczony prompt; `review_note` pozostaje poza wysyłką do dostawcy. Dotyczy to także endpointu liczenia tokenów. Wszystkie dane demonstracyjne są fikcyjne.
 
 ## 6. Jedna polityka, jeden feed
 
@@ -168,10 +187,14 @@ Minimalna zawartość polityki, do zapisania w JSON podczas A4:
 | `controls` | Dostęp, redakcja, semantyka, budżet i artefakty: włączone |
 | `semantic.block_threshold` | `0.80`; blokuj przy `score >= threshold` |
 | `semantic.on_error` | `deny` |
-| `models.allowed`, `models.detector`, `models.summary` | Lista z `gpt-6-luna`; oba zastosowania wybierają tę nazwę |
-| `models.detector_max_output_tokens`, `models.summary_max_output_tokens` | `1024`, `2048` |
-| `models.reasoning_effort`, `models.timeout_seconds` | `low`, `30` |
-| `resources.max_input_tokens_per_call` | `8192`, dla kompletnego wejścia |
+| `models.allowed` | `jev-1.13.0`, `gpt-6-luna`; role modeli są rozdzielone |
+| `models.detector`, `models.summary` | `jev-1.13.0`, `gpt-6-luna` |
+| `models.summary_max_output_tokens` | `2048`; Jev nie używa parametru wyjścia OpenAI |
+| `models.detector_reserved_input_tokens` | `65536`, konserwatywna granica do potwierdzenia z taryfą w B1 |
+| `models.summary_reasoning_effort`, `models.summary_timeout_seconds` | `low`, `30` |
+| `models.detector_timeout_seconds` | `10` |
+| `resources.max_summary_input_tokens` | `8192`, dla kompletnego wejścia Luny |
+| `resources.max_detector_state_chars` | `12000`, stan Jev plus ograniczone pytania; bez cichego ucinania |
 | `resources.max_requests_per_task` | `20` |
 | `resources.max_provider_calls_per_task` | `40`, łącznie liczenie tokenów, detekcja i podsumowanie |
 | `resources.max_concurrency_per_principal` | `2` żądania aplikacyjne w toku |
@@ -180,10 +203,11 @@ Minimalna zawartość polityki, do zapisania w JSON podczas A4:
 | `budget.task_limit_nusd` | `50000000` = 0,05 USD |
 | `budget.principal_limit_nusd` | `200000000` = 0,20 USD |
 | `budget.global_limit_nusd` | `500000000` = 0,50 USD dla tego demo |
-| `acl`, `redaction`, `outbound_fields` | Role i pola z sekcji 5; zakres narzędzi zapisany jawnie |
+| `acl`, `outbound_fields` | Role i pola z sekcji 5; zakres narzędzi zapisany jawnie |
+| `redaction` | Silnik Presidio, encje, języki, progi per encja, operatory i wersja recognizerów z sekcji 2 |
 | `pricing` | Wersja, data i URL źródła, model/tryb, stawki i konserwatywna stawka wejścia |
 
-Kwoty to nasze limity demonstracji, nie ceny modelu ani gwarancja całego rachunku OpenAI. B4 potwierdza stawki z [oficjalnego cennika](https://developers.openai.com/api/docs/pricing). Nie kopiujemy cen z wcześniejszego researchu. Do czasu wpisania poprawnej tabeli cen profil live nie uruchamia generowania.
+Kwoty to nasze limity demonstracji, nie ceny modelu ani gwarancja całego rachunku dostawców. B4 potwierdza osobno taryfę [OpenAI](https://developers.openai.com/api/docs/pricing) i [TypeSafe](https://docs.typesafe.ai/models). Nie kopiujemy cen z wcześniejszego researchu. Do czasu wpisania poprawnej tabeli cen profil live nie uruchamia generowania.
 
 Pliki JSON służą do startu/importu. Po aktywacji źródłem prawdy jest zapisana w SQLite aktywna wersja, widoczna w API; restart odtwarza ją z bazy. `make reload-config` ma importować zmienione pliki przez tę samą walidację co panel. Edycja pliku bez aktywacji nie zmienia stanu serwera. Żaden endpoint nie przyjmuje dowolnej ścieżki importu.
 
@@ -199,18 +223,24 @@ Feed: `schema_version`, `feed_version`, `rules[]`; każda reguła ma `rule_id`, 
 
 Osoba 2 implementuje `reserve(context, purpose, unit, amount)`, `settle(reservation_id, actual_usage)`, `release_not_sent(reservation_id)` i `mark_unknown(reservation_id)`. Osoba 1 używa ich w gatewayu. Jednostki `nusd` i `test_credit` mają osobne salda; nie wolno ich dodawać. 1 USD = 1 000 000 000 nUSD.
 
-W jednej krótkiej transakcji SQLite sprawdzamy limity zadania, użytkownika i całego demo oraz dopisujemy rezerwację do wszystkich właściwych liczników. Warunek w każdym zakresie: `spent + reserved + requested <= limit`. Rezerwacja i liczniki są trwałe. Nie trzymamy transakcji przez czas wywołania OpenAI. Przy zajętej bazie stosujemy ograniczony retry transakcji, nie ponowienie wywołania dostawcy. SQLite dopuszcza pojedynczego zapisującego; mechanikę transakcji opisuje [dokumentacja SQLite](https://www.sqlite.org/lang_transaction.html).
+W jednej krótkiej transakcji SQLite sprawdzamy limity zadania, użytkownika i całego demo oraz dopisujemy rezerwację do wszystkich właściwych liczników. Warunek w każdym zakresie: `spent + reserved + requested <= limit`. Rezerwacja i liczniki są trwałe. Nie trzymamy transakcji przez czas wywołania Jev ani OpenAI. Przy zajętej bazie stosujemy ograniczony retry transakcji, nie ponowienie wywołania dostawcy. SQLite dopuszcza pojedynczego zapisującego; mechanikę transakcji opisuje [dokumentacja SQLite](https://www.sqlite.org/lang_transaction.html).
 
 `RESERVED` → `STARTED` zapisujemy przed wysłaniem generacji; następnie `SETTLED` przy znanym zużyciu, `RELEASED` przy pewności, że nic nie wysłano, albo `UNKNOWN` przy niepewnym skutku. `UNKNOWN` zachowuje rezerwację pieniędzy/tokenów i zajęty slot wywołania dostawcy do wyjaśnienia. Slot żądania HTTP można zwolnić oddzielnie. Po restarcie pozostałe `RESERVED`/`STARTED` przechodzą konserwatywnie w `UNKNOWN`, bez zerowania sald.
 
 Rozliczamy także detektor, który zakończył się blokadą, oraz odpowiedź odrzuconą przez filtr. Odmowa biznesowa nie cofa kosztu wykonanego wywołania. Odzyskanie statusu `UNKNOWN` wymaga dowodu z dostawcy lub jawnego ręcznego uzgodnienia; samo odświeżenie panelu nie zwalnia salda.
 
-### Realne OpenAI
+### Jev: osobna taryfa i rezerwacja
+
+Adapter `jev.py` nie używa tokenizera OpenAI ani `max_output_tokens`. W P0 rezerwuje konserwatywnie koszt całego maksymalnego wejścia obsługiwanego przez wybraną wersję, z zapasem: `65536 × input_rate_nusd`. Osoba 2 potwierdza tę granicę i taryfę przed live; przy braku potwierdzenia wywołanie jest blokowane. Taki zapas może odmówić taniej operacji przy końcówce budżetu — pokazujemy to jawnie.
+
+Po odpowiedzi rozliczamy rzeczywiste `usage.input_tokens` według taryfy TypeSafe. Jeżeli taryfa nie nalicza wyjścia, jego tokeny zapisujemy jako zużycie z zerową stawką kosztową; nie stosujemy ceny wyjścia Luny. Przy nieznanym koszcie, błędzie po wysłaniu lub timeoutcie zachowujemy rezerwację. Oba adaptery korzystają z tych samych nadrzędnych sald, osobnych rekordów usage i tej samej zasady braku niejawnych retry.
+
+### Realne OpenAI — podsumowanie
 
 1. Najpierw sprawdź uprawnienia i usuń niedopuszczone dane. Zamroź kompletne wejście wraz z instrukcjami i schematem.
 2. Ogranicz liczbę i równoległość żądań do dostawcy. Policz pełne wejście przez `responses.input_tokens.count`; uwzględnij instrukcje i schemat. Ten endpoint także otrzymuje dane, więc podlega regułom wyjścia. Jeśli liczenie nie działa, zakończ `TOKEN_COUNT_UNAVAILABLE` przed generowaniem.
 3. Rezerwuj `input_tokens × max_input_rate_nusd + max_output_tokens × output_rate_nusd`. Stawka wejścia ma uwzględniać najdroższy możliwy wariant dla wybranego trybu, w tym zapis cache, jeśli może wystąpić. Profil demo dopuszcza tylko krótkie teksty i ustalony tryb; inne modele/usługi/regiony wymagają osobnej tabeli.
-4. Wyślij dokładnie policzone wejście z ustalonym limitem wyjścia. Każde ponowienie potrzebuje nowej kontrolowanej próby; SDK nie ponawia automatycznie. Osobno rezerwuj detektor i podsumowanie.
+4. Wyślij dokładnie policzone wejście z ustalonym limitem wyjścia. Każde ponowienie potrzebuje nowej kontrolowanej próby; SDK nie ponawia automatycznie. Ta rezerwacja dotyczy podsumowania; Jev ma rezerwację według swojej taryfy.
 5. Rozlicz na podstawie `usage`. `output_tokens` obejmuje również tokeny niewidoczne w odpowiedzi. Przy niepełnych danych o rozliczeniu zachowaj konserwatywną kwotę i oznacz koszt jako szacowany/niepewny. Nie pokazuj jej jako potwierdzonej faktury.
 
 Endpoint liczenia i znaczenie tokenów wyjścia potwierdza [dokumentacja liczenia tokenów](https://developers.openai.com/api/docs/guides/token-counting). Dostępność na koncie i obsługę pełnego payloadu sprawdza B1. Bez potwierdzonej górnej granicy kosztu nie opisujemy limitu jako twardej gwarancji finansowej. Obsługa innych wywołań poza gatewayem jest poza zakresem naszego licznika.
@@ -236,9 +266,9 @@ Eksport JSONL pochodzi z tych samych `audit_events`. Nie wymyślamy procentowego
 | Grupa | Właściciel | Minimalny dowód |
 |---|---|---|
 | Tożsamość i dostęp | Osoba 1 | Brak tokenu, cudzy task, podmieniona rola, A/B, niedozwolone narzędzie: odpowiedni etap odmowy |
-| Dane | Osoba 1 | Sekret/PII nie występuje w wyjściu do OpenAI, panelu ani audycie; role mają różny zakres |
+| Dane | Osoba 1 | Sekret/PII nie występuje w wyjściu do Jev/OpenAI, panelu ani audycie; role mają różny zakres |
 | Polityka i feed | Osoba 1 | Reload zmienia wynik, błędna aktualizacja zachowuje ochronę, podmiana bajtów/niebezpieczny format daje blokadę |
-| Semantyka | Osoba 2 | Granica progu na stubie; osobna ewaluacja prawdziwej Luny z błędami klasyfikacji |
+| Semantyka | Osoba 2 | Granica progu na stubie; osobna ewaluacja prawdziwego Jev z błędami klasyfikacji |
 | Budżet | Osoba 2 | Granica limitu, 20/5, restart, timeout, retry, limity między zadaniami i koszt detektora |
 | Integracja i audyt | Oboje | Legalny przepływ, każdy etap błędu, idempotencja i brak pominięcia gatewaya w pokazanym zakresie |
 
@@ -249,10 +279,10 @@ Każda kontrola ma test wykrywający jej wyłączenie w kopii testowej. Zestaw A
 | `make setup` | `uv sync --locked`, przygotowanie lokalnej bazy bez nadpisania istniejących sekretów |
 | `make dev` | Uvicorn + statyczny panel, lokalnie na `127.0.0.1:8000` |
 | `make check` | Ruff lint i sprawdzenie formatu |
-| `make test` | Wszystkie testy offline, zablokowana sieć do OpenAI |
-| `make test-live` | Jawne płatne testy Luny i zapis raportu; brak klucza/modelu lub niespełnione kryteria dają niezerowy exit |
+| `make test` | Wszystkie testy offline, zablokowana sieć do TypeSafe i OpenAI |
+| `make test-live` | Jawne płatne testy Jev i Luny, lokalne sprawdzenie Presidio i zapis raportu; brak klucza/modelu lub niespełnione kryteria dają niezerowy exit |
 | `make verify` | `check`, `test`, `test-live` |
-| `make benchmark` | Pomiar offline; `LIVE=1` dodaje ograniczoną serię OpenAI w obrębie budżetu |
+| `make benchmark` | Pomiar offline; `LIVE=1` dodaje ograniczoną serię Jev/OpenAI w obrębie budżetu |
 | `make reload-config` | Zweryfikowany import plików polityki/feedu przez wspólną ścieżkę aktywacji |
 | `make reset-demo` | Reset wyłącznie syntetycznych zadań i lokalnej bazy demo, po świadomym wywołaniu przez operatora |
 
@@ -270,9 +300,9 @@ Przeczytano [pełny brief](../dane_wejsciowe/opis_tasku.pdf), [regulamin](../dan
 
 | Kwestia | Stan / właściciel |
 |---|---|
-| OpenAI zamiast lokalnego modelu | Decyzja zespołu: Luna. Brief wskazuje oczekiwanie modeli lokalnych i brak dostarczanych subskrypcji. Osoba 2 potwierdza u mentora dopasowanie wariantu API. Nie uznajemy automatycznie tej różnicy za rozstrzygniętą. |
+| Zewnętrzne API zamiast lokalnego detektora | Decyzja zespołu: Jev do oceny i Luna do generowania; Presidio działa lokalnie. Brief wskazuje oczekiwanie modeli lokalnych i brak dostarczanych subskrypcji. Osoba 2 potwierdza u mentora dopasowanie wariantu API. Nie uznajemy automatycznie tej różnicy za rozstrzygniętą. |
 | Zasoby lokalnych modeli | W P0 pokazujemy wspólny mechanizm limitów na lokalnym adapterze testowym. To nie jest lokalna inferencja. Jeśli partner wymaga działającego lokalnego modelu, trzeba wspólnie zmienić zakres. |
-| Dostęp do OpenAI | Własny projekt/API key, dostęp do `gpt-6-luna`, płatności/limity i internet — weryfikuje osoba 2 w B1. |
+| Dostęp do Jev i OpenAI | Osobne klucze, dostęp do obu modeli, taryfy/limity i internet — weryfikuje osoba 2 w B1. |
 | Start i deadline | `terms.pdf`, pkt 5 zapisuje 3.10 11:00 PM → 4.10 11:00 PM; starsze materiały podawały 11:00. Osoba 1 zapisuje wiążącą odpowiedź organizatora z datą i źródłem. Nie rozstrzygamy PM samodzielnie. |
 | Wagi | Brief: 30/20/20/15/15; terms: 30/20/20/20/10. Osoba 1 potwierdza wiążącą wersję. Testy i raportowanie pozostają w podstawie. |
 | Historyczny exploit | Osoba 1 pokazuje mentorowi walidację artefaktu/feed i potwierdza, czy taki zakres spełnia oczekiwanie, czy potrzebny jest przykład konkretnego CVE. |
