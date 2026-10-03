@@ -10,10 +10,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Header, Request
 
-from app import db
+from app import audit, db
 from app.api.errors import ApiError, request_id_of
+from app.api.paging import EventsAfter, EventsLimit
 from app.auth import CurrentPrincipal
 from app.contracts import (
+    AuditEventPage,
     CreateTaskRequest,
     Decision,
     ExecuteRequest,
@@ -44,12 +46,34 @@ def create_task(
 
 @router.get("/tasks/{task_id}")
 def get_task(task_id: UUID, principal: CurrentPrincipal, request: Request) -> TaskResponse:
-    """Task metadata for its owner or an admin. Decisions and usage arrive with A3."""
+    """Task metadata for its owner or an admin. Decisions are in ``/events``."""
     with closing(db.connect(request.app.state.settings.db_path)) as conn:
         task = load_task(conn, task_id)
     if task is None or not access.can_view_task(principal, task):
         raise ApiError(403, ReasonCode.TASK_FORBIDDEN)
     return task.to_response()
+
+
+@router.get("/tasks/{task_id}/events")
+def get_task_events(
+    task_id: UUID,
+    principal: CurrentPrincipal,
+    request: Request,
+    after: EventsAfter = 0,
+    limit: EventsLimit = 50,
+) -> AuditEventPage:
+    """Audit history of a task for its owner or an admin, oldest first.
+
+    Lists the owner's requests only. Refused attempts by other principals on this task
+    are visible to admins in ``/admin/events``.
+    """
+    with closing(db.connect(request.app.state.settings.db_path)) as conn:
+        task = load_task(conn, task_id)
+        if task is None or not access.can_view_task(principal, task):
+            raise ApiError(403, ReasonCode.TASK_FORBIDDEN)
+        return audit.list_events(
+            conn, limit=limit, after=after, task_id=task.task_id, principal_id=task.principal_id
+        )
 
 
 @router.post("/execute")

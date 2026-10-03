@@ -1,14 +1,21 @@
-"""Admin API skeleton (docs/WSPOLNE_USTALENIA.md, section 5).
+"""Admin API (docs/WSPOLNE_USTALENIA.md, section 5).
 
 The router requires the admin role for every route, including ones added later.
-Each route refuses with 501 ``NOT_IMPLEMENTED`` until its step is built.
+Audit events and their export work since A3. The other routes refuse with
+501 ``NOT_IMPLEMENTED`` until their step is built.
 """
 
-from fastapi import APIRouter, Depends
+from contextlib import closing
+from uuid import UUID
 
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
+
+from app import audit, db
 from app.api.errors import ApiError
+from app.api.paging import EventsAfter, EventsLimit
 from app.auth import require_admin
-from app.contracts import ReasonCode
+from app.contracts import AuditEventPage, ReasonCode
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
@@ -42,9 +49,18 @@ def put_feed() -> None:
 
 
 @router.get("/events")
-def list_events() -> None:
-    """A3: audit events with bounded pagination and a task filter."""
-    raise _not_implemented()
+def list_events(
+    request: Request,
+    after: EventsAfter = 0,
+    limit: EventsLimit = 50,
+    task_id: UUID | None = None,
+    request_id: UUID | None = None,
+) -> AuditEventPage:
+    """All audit events, oldest first, optionally for one task or one request."""
+    with closing(db.connect(request.app.state.settings.db_path)) as conn:
+        return audit.list_events(
+            conn, limit=limit, after=after, task_id=task_id, request_id=request_id
+        )
 
 
 @router.get("/metrics")
@@ -54,9 +70,13 @@ def get_metrics() -> None:
 
 
 @router.get("/audit/export")
-def export_audit() -> None:
-    """A3: JSONL export from the same audit_events table as the panel."""
-    raise _not_implemented()
+def export_audit(request: Request) -> StreamingResponse:
+    """All audit events as JSON Lines, from the same table as ``/admin/events``."""
+    return StreamingResponse(
+        audit.export_lines(request.app.state.settings.db_path),
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": 'attachment; filename="controlproof-audit.jsonl"'},
+    )
 
 
 @router.get("/test-results")

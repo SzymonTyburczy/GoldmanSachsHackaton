@@ -135,7 +135,7 @@ def test_admin_passes_the_role_check(
 ) -> None:
     response = client.get("/admin/events", headers=headers["admin"])
 
-    assert response.status_code == 501  # skeleton route, but authorised
+    assert response.status_code == 200
 
 
 def test_missing_token_disables_only_that_identity(db_path: Path) -> None:

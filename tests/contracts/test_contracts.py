@@ -9,6 +9,7 @@ from app.contracts import (
     MAX_PROMPT_CHARS,
     AdapterCalls,
     AuditEvent,
+    AuditEventPage,
     BudgetUnit,
     ControlId,
     ControlResult,
@@ -399,3 +400,12 @@ class TestTaskResponse:
     def test_rejects_invalid_task(self, overrides: dict[str, object]) -> None:
         with pytest.raises(ValidationError):
             TaskResponse(**self.fields(**overrides))
+
+
+def test_audit_event_page_has_a_positive_cursor_or_none() -> None:
+    page = AuditEventPage(events=(), next_after=None)
+
+    assert page.model_dump(mode="json") == {"schema_version": 1, "events": [], "next_after": None}
+    for cursor in (0, -1, True, "5"):
+        with pytest.raises(ValidationError):
+            AuditEventPage(events=(), next_after=cursor)

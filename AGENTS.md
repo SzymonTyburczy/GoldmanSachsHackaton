@@ -9,7 +9,7 @@ Odpowiadaj po polsku, konkretnie. Kod, nazwy API, UI i materiały konkursowe pis
 3. [Plan dwóch osób](docs/PLAN_DWOCH_OSOB.md) — kolejność zadań i odbiór.
 4. [Wspólne ustalenia](docs/WSPOLNE_USTALENIA.md) — obowiązujące kontrakty i technologie.
 
-Na 3.10.2026 repo zawiera kroki A1 i A2: kontrakty, schemat SQLite, `/health`, panel, tokeny demo, zadania oraz `documents.read` z kontrolą dostępu i adapterem dokumentów. Audyt, polityka, Presidio, Jev, Luna, budżet, artefakty i wyniki testów live jeszcze nie istnieją; ich endpointy odpowiadają `501`. Sprawdź aktualny stan przed kodowaniem. Planowane komendy i struktura katalogów nie są dowodem ich istnienia.
+Na 3.10.2026 repo zawiera kroki A1–A3 oraz moduły B2–B3: kontrakty, schemat SQLite, `/health`, panel, tokeny demo, zadania, `documents.read` z kontrolą dostępu i adapterem dokumentów, audyt w SQLite z historią zadania i eksportem, adaptery Jev/Luna i rezerwacje budżetu. Gateway nie wywołuje jeszcze Jev, Luny ani budżetu (A5). Polityka, Presidio, artefakty i wyniki testów live jeszcze nie istnieją; ich endpointy odpowiadają `501`. Sprawdź aktualny stan przed kodowaniem. Planowane komendy i struktura katalogów nie są dowodem ich istnienia.
 
 ## Decyzje zespołu
 
