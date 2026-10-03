@@ -170,7 +170,8 @@ Kod w `app/contracts.py` doprecyzowuje tabelę powyżej. Zmiana tych ustaleń je
 | `GET /health` | Publiczny | Stan procesu i konfiguracji, bez kluczy i płatnego pingowania modelu |
 | `POST /v1/tasks` | Zalogowany | Body: `schema_version`, `client_id`; serwer sprawdza zakres i nadaje ID/właściciela |
 | `POST /v1/execute` | Właściciel zadania | Wykonuje opisany wyżej kontrakt |
-| `GET /v1/tasks/{id}` | Właściciel/admin | Stan zadania, decyzje i zużycie |
+| `GET /v1/tasks/{id}` | Właściciel/admin | Stan zadania |
+| `GET /v1/tasks/{id}/events` | Właściciel/admin | Decyzje i wykonania w zadaniu, z paginacją |
 | `GET /admin/policy` | Admin | Pełna aktywna polityka i wersja |
 | `PUT /admin/policy` | Admin | Walidacja całej polityki i atomowa aktywacja |
 | `GET /admin/feed`, `PUT /admin/feed` | Admin | Odczyt oraz walidacja/aktywacja pełnego feedu |
@@ -288,6 +289,26 @@ Audyt zawiera wynik każdej kontroli i wykonania. Nie zapisuje body, pełnego pr
 Panel pokazuje aktywne i wyłączone kontrole, wersję konfiguracji/feedu, ostatnie decyzje i powody, wykonania adapterów, `spent/reserved/remaining`, osobno koszt detektora i podsumowania, błędy oraz opóźnienia. Raport testów ma czas, commit, tryb offline/live i liczbę przypadków; stary raport nie może wyglądać jak bieżący test.
 
 Eksport JSONL pochodzi z tych samych `audit_events`. Nie wymyślamy procentowego „poziomu bezpieczeństwa” ani „zaoszczędzonych pieniędzy”. Przełączniki bez kontroli backendowej nie są zabezpieczeniami.
+
+### Doprecyzowania z A3 — do potwierdzenia przez osobę 2
+
+- **Zdarzenia.** Gateway zapisuje `AuditEvent` po każdym kroku (`RequestTrail` w `app/audit.py`). Każde zdarzenie ma `event_id`, `request_id` (ten sam co nagłówek `X-Request-ID`), kontrolę, etap, decyzję, kod, wersje polityki/feedu i stan `adapter_calls` z chwili zapisu. Odmowa po odczycie pokazuje więc ten odczyt. Odpowiedź `POST /v1/execute` podaje identyfikatory zdarzeń w `audit_event_ids`.
+- **Kroki `documents.read`.** Zdarzenia w kolejności zapisu:
+
+| Krok | `control_id` / `stage` | Zapis |
+|---|---|---|
+| Cudze lub nieznane zadanie | `access` / `admission` | `DENY TASK_FORBIDDEN`, `task_id` z żądania, `client_id=null` |
+| Brak aktywnej polityki lub feedu | `gateway` / `admission` | `DENY INVALID_CONFIG` |
+| Przyjęcie żądania | `gateway` / `admission` | `ALLOW OK`, przypięte wersje |
+| Dokument innego klienta lub nieznany | `access` / `pre_document` | `DENY CLIENT_FORBIDDEN`, adaptery `NOT_CALLED` |
+| Intencja przed odczytem | `access` / `pre_document` | `ALLOW OK`, `STARTED`, `document_read=STARTED` |
+| Błąd odczytu | `gateway` / `pre_detector` | `DENY UPSTREAM_FAILED`, `FAILED`, `latency_ms` |
+| Odczyt i usunięcie pól | `redaction` / `pre_detector` | `REDACT PII_REDACTED` lub `ALLOW OK`, `SUCCEEDED`, `redacted_fields`, `latency_ms` |
+
+- **Znaczenie pól.** `pre_detector` to etap po odczycie dokumentu, przed wysłaniem danych do Jev lub OpenAI. Detektor dochodzi w A5; w A3 to ostatni krok `documents.read`. `execution_status` zdarzenia dotyczy adaptera, który dany krok uruchamia lub kończy; sama decyzja ma `NOT_CALLED`. `latency_ms` to czas wywołania adaptera; w pozostałych zdarzeniach `null`. `usage`, `model` i `semantic` pozostają puste do A5. `documents.summarize` po dozwolonym dostępie zapisuje `access ALLOW` bez intencji i odpowiada `501`; `artifacts.admit` zapisuje przyjęcie i odpowiada `501`.
+- **Awaria zapisu.** Każde zdarzenie to jeden `INSERT` w autocommit, wykonany przed następnym krokiem. Jeśli nie zapisze się zdarzenie przed wywołaniem adaptera (przyjęcie, odmowa lub intencja), odpowiedź to `503 AUDIT_UNAVAILABLE`, a adapter nie startuje. Jeśli nie zapisze się wynik po odczycie, odpowiedź to `200`, `DENY`, `AUDIT_UNAVAILABLE` z `output=null`; `execution_status` i `adapter_calls` pokazują wykonany odczyt. Zapisana intencja zostaje `STARTED` do uzgodnienia. Log aplikacji podaje wtedy tylko `request_id`, etap i klasę błędu.
+- **Odczyt.** `GET /v1/tasks/{id}/events` (właściciel i admin) zwraca zdarzenia właściciela zadania; próby innych osób na tym zadaniu widzi admin w `GET /admin/events`. `GET /admin/events` filtruje po `task_id` i `request_id`. Oba endpointy zwracają `AuditEventPage` (`schema_version`, `events`, `next_after`) od najstarszych; `limit` 1–200 (domyślnie 50), następna strona przez `after=next_after`, ostatnia ma `next_after=null`. `GET /admin/audit/export` zwraca wszystkie zdarzenia jako JSON Lines (`application/x-ndjson`), czytane partiami z tej samej tabeli. Odpowiedzi `/v1/*` i `/admin/*` mają `Cache-Control: no-store`.
+- **Bez treści.** `AuditEvent` nie ma pola na dowolny tekst: tylko identyfikatory, wartości enum, nazwy pól, liczby i usage. Żądania bez poprawnego tokenu i z błędnym schematem nie trafiają do audytu, żeby anonimowy klient nie mógł zapisywać do bazy; widać je w access logu bez query stringu. Testy sprawdzają bazę, eksport i logi pod kątem tokenów i wartości dokumentów.
 
 ## 9. Wspólne testy i komendy do dostarczenia
 

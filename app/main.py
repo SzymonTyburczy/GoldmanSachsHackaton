@@ -31,6 +31,8 @@ PANEL_CSP = (
 )
 # Swagger UI and ReDoc load their assets from a CDN, so the panel CSP is not applied there.
 DOCS_PATHS = ("/docs", "/redoc")
+# Authenticated answers (tasks, audit history, exports) must not stay in shared caches.
+NO_STORE_PATHS = ("/v1/", "/admin/")
 
 # FastAPI's native OpenTelemetry can record validation failures, including submitted
 # values, and export them when OTEL_* variables are set. ControlProof keeps its own audit
@@ -89,6 +91,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["Referrer-Policy"] = "no-referrer"
         if not request.url.path.startswith(DOCS_PATHS):
             response.headers["Content-Security-Policy"] = PANEL_CSP
+        if request.url.path.startswith(NO_STORE_PATHS):
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     app.add_exception_handler(ApiError, api_error_handler)

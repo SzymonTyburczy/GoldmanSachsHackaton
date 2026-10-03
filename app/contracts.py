@@ -496,6 +496,14 @@ class TaskResponse(StrictModel):
     created_at: UtcDatetime
 
 
+class AuditEventPage(StrictModel):
+    """Body of ``GET /admin/events`` and ``GET /v1/tasks/{task_id}/events``, oldest first."""
+
+    schema_version: SchemaVersion = SCHEMA_VERSION
+    events: tuple[AuditEvent, ...]
+    next_after: PositiveInt | None  # pass as ``after`` for the next page; None on the last
+
+
 class ErrorDetail(StrictModel):
     """Location and type of a validation error. Never echoes the submitted value."""
 

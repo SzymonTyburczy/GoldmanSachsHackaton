@@ -1,4 +1,4 @@
-"""Test helpers shared by gateway tests: demo tokens and config activation."""
+"""Test helpers shared by gateway tests: demo tokens, config activation, audit outage."""
 
 import sqlite3
 from contextlib import closing
@@ -23,4 +23,13 @@ def activate_config(db_path: Path, kind: str, version: int) -> None:
             "INSERT INTO active_config (kind, version, activated_at)"
             " VALUES (?, ?, '2026-10-03T00:00:00Z')",
             (kind, version),
+        )
+
+
+def break_audit(db_path: Path, stage: str) -> None:
+    """Make every audit insert for ``stage`` fail, as a full disk or a locked file would."""
+    with closing(sqlite3.connect(db_path, autocommit=True)) as conn:
+        conn.execute(
+            f"CREATE TRIGGER audit_outage_{stage} BEFORE INSERT ON audit_events"
+            f" WHEN NEW.stage = '{stage}' BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END"
         )
