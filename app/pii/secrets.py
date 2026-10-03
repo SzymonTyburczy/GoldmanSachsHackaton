@@ -1,4 +1,4 @@
-"""Own secret rule, independent of Presidio (docs/WSPOLNE_USTALENIA.md, section 2).
+"""Secret masking rules, independent of Presidio.
 
 Presidio does not look for credentials, so known key shapes are replaced here before
 Presidio sees the text. The patterns are linear-time regular expressions fixed in code;

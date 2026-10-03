@@ -1,8 +1,6 @@
 """Shared data contracts for ControlProof (schema_version 1).
 
-Source of truth for the formats described in docs/WSPOLNE_USTALENIA.md, section 4.
-Both people import from here; a change in this file is a contract change and must be
-agreed before editing.
+Shared formats for the API, controls, adapters and persisted records.
 
 Rules applied to every model:
 - unknown fields are rejected (``extra="forbid"``),

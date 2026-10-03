@@ -1,4 +1,4 @@
-"""Stored requests of ``POST /v1/execute`` (docs/WSPOLNE_USTALENIA.md, sections 3–4).
+"""Stored requests and idempotency for ``POST /v1/execute``.
 
 Every admitted request gets a row in ``requests`` before any adapter runs. The row is
 claimed in one write transaction together with the request limits of the pinned policy,

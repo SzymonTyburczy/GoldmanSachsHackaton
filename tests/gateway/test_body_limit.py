@@ -1,4 +1,4 @@
-"""Request body limit before parsing (docs/WSPOLNE_USTALENIA.md, section 3, step 1)."""
+"""Request body limit before parsing."""
 
 import sqlite3
 from collections.abc import Iterator

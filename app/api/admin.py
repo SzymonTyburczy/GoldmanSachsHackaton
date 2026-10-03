@@ -1,4 +1,4 @@
-"""Admin API (docs/WSPOLNE_USTALENIA.md, section 5).
+"""Admin API for configuration, audit, metrics and saved reports.
 
 The router requires the admin role for every route, including ones added later.
 Policy and feed changes go through the same validation and atomic activation as

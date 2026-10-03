@@ -1,4 +1,4 @@
-"""Latest saved test reports for ``GET /admin/test-results`` (docs/WSPOLNE_USTALENIA.md, 8).
+"""Latest saved test reports for ``GET /admin/test-results``.
 
 Reads the JSON reports that ``make test-live`` (``scripts.evaluate``) and
 ``make benchmark`` write to ``var/reports``; it never runs a test or calls a provider.

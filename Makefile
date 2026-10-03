@@ -1,5 +1,4 @@
-# ControlProof developer commands. Live checks make real, billable provider requests.
-# reset-demo is not implemented yet and fails on purpose so it never looks like a passed check.
+# ContrAl developer commands. Live checks make real, billable provider requests.
 
 UV ?= uv
 HOST ?= 127.0.0.1
@@ -9,7 +8,7 @@ ITERATIONS ?= 100
 WITH_ENV = $$(test -f .env && echo --env-file=.env)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup dev check format test test-live verify reload-config benchmark reset-demo
+.PHONY: help setup dev check format test test-live verify reload-config benchmark
 
 help:
 	@echo "setup      install locked dependencies, create .env, fill empty demo tokens, initialise the"
@@ -65,6 +64,3 @@ benchmark:
 
 reload-config:
 	$(UV) run $(WITH_ENV) python -m app.policy reload
-
-reset-demo:
-	@echo "$@ is not implemented yet." >&2; exit 1

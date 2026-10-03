@@ -1,4 +1,4 @@
-"""Demo identities and bearer-token authentication (docs/WSPOLNE_USTALENIA.md, section 5).
+"""Demo identities and bearer-token authentication.
 
 Identity, role and client scope come only from this server-side directory. A token is
 read from the ``Authorization: Bearer`` header and nowhere else; fields such as ``role``
