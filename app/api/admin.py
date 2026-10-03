@@ -1,8 +1,9 @@
 """Admin API (docs/WSPOLNE_USTALENIA.md, section 5).
 
 The router requires the admin role for every route, including ones added later.
-Audit events and their export work since A3, the policy since A4. The other routes
-refuse with 501 ``NOT_IMPLEMENTED`` until their step is built.
+Policy and feed changes go through the same validation and atomic activation as
+``make reload-config``; an invalid or stale update leaves the active version in force.
+Metrics and test results are read-only views of stored data.
 """
 
 from contextlib import closing
@@ -11,18 +12,25 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app import audit, db, policy
+from app import audit, db, metrics, policy, reports
 from app.api.errors import ApiError
 from app.api.paging import EventsAfter, EventsLimit
 from app.auth import CurrentPrincipal, require_admin
 from app.contracts import AuditEventPage, ReasonCode
-from app.policy import ActivePolicy, Policy, PolicyUpdate, StoredConfig
+from app.metrics import AdminMetrics
+from app.policy import (
+    ActiveFeed,
+    ActivePolicy,
+    ConfigKind,
+    Feed,
+    FeedUpdate,
+    Policy,
+    PolicyUpdate,
+    StoredConfig,
+)
+from app.reports import TestResults
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
-
-
-def _not_implemented() -> ApiError:
-    return ApiError(501, ReasonCode.NOT_IMPLEMENTED)
 
 
 def _active_policy(stored: StoredConfig) -> ActivePolicy:
@@ -37,17 +45,49 @@ def _active_policy(stored: StoredConfig) -> ActivePolicy:
     )
 
 
-@router.get("/policy")
-def get_policy(request: Request) -> ActivePolicy:
-    """The complete active policy and its version."""
+def _active_feed(stored: StoredConfig) -> ActiveFeed:
+    if not isinstance(stored.document, Feed):
+        raise TypeError("stored document is not a feed")
+    return ActiveFeed(
+        feed_version=stored.version,
+        sha256=stored.sha256,
+        created_at=stored.created_at,
+        created_by=stored.created_by,
+        feed=stored.document,
+    )
+
+
+def _load_active(request: Request, kind: ConfigKind) -> StoredConfig:
     with closing(db.connect(request.app.state.settings.db_path)) as conn:
         try:
-            stored = policy.load_active(conn, "policy")
+            stored = policy.load_active(conn, kind)
         except policy.StoredConfigError:
             stored = None
     if stored is None:
         raise ApiError(503, ReasonCode.INVALID_CONFIG)
-    return _active_policy(stored)
+    return stored
+
+
+def _activate(
+    request: Request,
+    kind: ConfigKind,
+    document: Policy | Feed,
+    expected_version: int | None,
+    created_by: str,
+) -> StoredConfig:
+    with closing(db.connect(request.app.state.settings.db_path)) as conn:
+        try:
+            return policy.activate(
+                conn, kind, document, expected_version=expected_version, created_by=created_by
+            )
+        except policy.VersionConflictError:
+            raise ApiError(409, ReasonCode.VERSION_CONFLICT) from None
+
+
+@router.get("/policy")
+def get_policy(request: Request) -> ActivePolicy:
+    """The complete active policy and its version."""
+    return _active_policy(_load_active(request, "policy"))
 
 
 @router.put("/policy")
@@ -58,30 +98,28 @@ def put_policy(body: PolicyUpdate, principal: CurrentPrincipal, request: Request
     ``expected_version`` gives 409. In both cases the active version stays in force.
     Requests already admitted keep the version they pinned.
     """
-    with closing(db.connect(request.app.state.settings.db_path)) as conn:
-        try:
-            stored = policy.activate(
-                conn,
-                "policy",
-                body.policy,
-                expected_version=body.expected_version,
-                created_by=principal.principal_id,
-            )
-        except policy.VersionConflictError:
-            raise ApiError(409, ReasonCode.VERSION_CONFLICT) from None
+    stored = _activate(
+        request, "policy", body.policy, body.expected_version, principal.principal_id
+    )
     return _active_policy(stored)
 
 
 @router.get("/feed")
-def get_feed() -> None:
-    """A6: active artifact feed and its version."""
-    raise _not_implemented()
+def get_feed(request: Request) -> ActiveFeed:
+    """The complete active artifact feed and its version."""
+    return _active_feed(_load_active(request, "feed"))
 
 
 @router.put("/feed")
-def put_feed() -> None:
-    """A6: validate a complete feed and activate it atomically."""
-    raise _not_implemented()
+def put_feed(body: FeedUpdate, principal: CurrentPrincipal, request: Request) -> ActiveFeed:
+    """Validate a complete feed and activate it as the next version.
+
+    Like the policy: 422 for an invalid feed and 409 for a stale ``expected_version``,
+    both without a change, so existing rules stay in force. The next request pins the
+    new version; requests already admitted keep theirs.
+    """
+    stored = _activate(request, "feed", body.feed, body.expected_version, principal.principal_id)
+    return _active_feed(stored)
 
 
 @router.get("/events")
@@ -100,9 +138,16 @@ def list_events(
 
 
 @router.get("/metrics")
-def get_metrics() -> None:
-    """A6/B4: counters, active and disabled controls, cost and reservations."""
-    raise _not_implemented()
+def get_metrics(request: Request) -> AdminMetrics:
+    """Counters, active and disabled controls, cost and reservations from stored data."""
+    with closing(db.connect(request.app.state.settings.db_path)) as conn:
+        loaded: dict[ConfigKind, StoredConfig | None] = {}
+        for kind in ("policy", "feed"):
+            try:
+                loaded[kind] = policy.load_active(conn, kind)
+            except policy.StoredConfigError:
+                loaded[kind] = None
+        return metrics.collect(conn, loaded["policy"], loaded["feed"])
 
 
 @router.get("/audit/export")
@@ -116,6 +161,6 @@ def export_audit(request: Request) -> StreamingResponse:
 
 
 @router.get("/test-results")
-def get_test_results() -> None:
-    """B5/A6: last saved test report with time and commit; never runs tests."""
-    raise _not_implemented()
+def get_test_results(request: Request) -> TestResults:
+    """Newest saved report of each kind, with its time and commit; never runs tests."""
+    return reports.latest(request.app.state.settings.reports_dir)

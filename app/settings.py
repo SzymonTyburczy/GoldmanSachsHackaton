@@ -13,6 +13,10 @@ from pydantic import BaseModel, ConfigDict, SecretStr
 DEFAULT_DB_PATH = Path("var/controlproof.sqlite3")
 # Synthetic demo documents and their trusted owner catalog, shipped with the code.
 DEFAULT_DOCUMENTS_DIR = Path(__file__).resolve().parent.parent / "data" / "documents"
+# Synthetic artifacts and their trusted manifest of SHA-256 digests (A6).
+DEFAULT_ARTIFACTS_DIR = Path(__file__).resolve().parent.parent / "data" / "artifacts"
+# Test and evaluation reports written by make test-live and make benchmark; read-only here.
+DEFAULT_REPORTS_DIR = Path(__file__).resolve().parent.parent / "var" / "reports"
 
 
 class Settings(BaseModel):
@@ -20,6 +24,8 @@ class Settings(BaseModel):
 
     db_path: Path = DEFAULT_DB_PATH
     documents_dir: Path = DEFAULT_DOCUMENTS_DIR
+    artifacts_dir: Path = DEFAULT_ARTIFACTS_DIR
+    reports_dir: Path = DEFAULT_REPORTS_DIR
     # Demo identities (A2): random bearer tokens mapped to identities on the server.
     token_analyst_a: SecretStr | None = None
     token_reviewer_a: SecretStr | None = None

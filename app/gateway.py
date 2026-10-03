@@ -18,7 +18,11 @@ Steps for documents, with an audit event at every step:
 Every provider call follows its reservation and is preceded by its intent record. It is
 bounded by the policy timeout. ``documents.read`` ends after the detector. Budget limits
 for each reservation are the pinned ones, lowered if an admin has activated lower limits
-since (section 6). Artifacts (A6) answer 501.
+since (section 6).
+
+``artifacts.admit`` calls no model: after the role's tools and the manifest, the bytes are
+read once, at most 64 KiB, and ``app.controls.artifacts`` checks their digest against the
+manifest and the pinned feed before it parses them as JSON.
 """
 
 import asyncio
@@ -36,6 +40,12 @@ import httpx
 import openai
 
 from app import budget, db, idempotency, policy, provider_calls
+from app.adapters.artifacts import (
+    ArtifactManifest,
+    ArtifactReadError,
+    ArtifactStore,
+    ArtifactTooLarge,
+)
 from app.adapters.documents import (
     CatalogEntry,
     DocumentAdapter,
@@ -49,11 +59,12 @@ from app.audit import AdapterName, AuditUnavailableError, RequestTrail
 from app.auth import Principal
 from app.budget import BudgetLimits
 from app.contracts import (
+    ArtifactAdmitOutput,
+    ArtifactAdmitRequest,
     ControlId,
     ControlResult,
     Decision,
     DocumentReadOutput,
-    DocumentReadRequest,
     DocumentSummarizeRequest,
     ExecuteRequest,
     ExecuteResponse,
@@ -67,11 +78,11 @@ from app.contracts import (
     Usage,
     utc_now,
 )
-from app.controls import access, semantic
+from app.controls import access, artifacts, semantic
 from app.controls.redaction import ProviderInput, mask_text, prepare_provider_input, redact_fields
 from app.controls.semantic import SemanticCheckError, SemanticEvaluator
 from app.pii.engine import PiiEngine, PiiEngineUnavailable, get_engine
-from app.policy import Policy
+from app.policy import Feed, Policy
 from app.prompts.semantic import SEMANTIC_QUESTIONS
 from app.settings import Settings
 from app.tasks import get_task
@@ -98,12 +109,16 @@ class Gateway:
         settings: Settings,
         catalog: DocumentCatalog,
         documents: DocumentAdapter,
+        manifest: ArtifactManifest,
+        artifact_store: ArtifactStore,
         providers: Providers | None = None,
         pii_engine: Callable[[tuple[str, ...]], PiiEngine] = get_engine,
     ) -> None:
         self._db_path = settings.db_path
         self._catalog = catalog
         self._documents = documents
+        self._manifest = manifest
+        self._artifact_store = artifact_store
         self._providers = providers or KeyedProviders(settings)
         self._pii_engine = pii_engine
 
@@ -121,9 +136,9 @@ class Gateway:
             raise ApiError(503, ReasonCode.AUDIT_UNAVAILABLE) from None
         if isinstance(admitted, ExecuteResponse):
             return admitted
-        context, pinned = admitted
+        context, pinned, feed = admitted
         try:
-            response = await self._run(trail, context, pinned, request)
+            response = await self._run(trail, context, pinned, feed, request)
         except AuditUnavailableError:
             if not trail.anything_called:
                 self._abandon(context, trail)
@@ -143,7 +158,7 @@ class Gateway:
         principal: Principal,
         request: ExecuteRequest,
         idempotency_key: UUID,
-    ) -> tuple[RequestContext, Policy] | ExecuteResponse:
+    ) -> tuple[RequestContext, Policy, Feed] | ExecuteResponse:
         """Load the task, pin the configuration and store the request, before any adapter.
 
         Returns a response instead of a context for a replayed key or a request limit.
@@ -151,12 +166,14 @@ class Gateway:
         with closing(db.connect(self._db_path)) as conn:
             task = get_task(conn, request.task_id)
             versions = policy.active_versions(conn)
-            pinned = None
-            if versions.policy_version is not None:
-                try:
+            pinned = feed = None
+            try:
+                if versions.policy_version is not None:
                     pinned = policy.load(conn, "policy", versions.policy_version).document
-                except policy.StoredConfigError:
-                    pinned = None
+                if versions.feed_version is not None:
+                    feed = policy.load(conn, "feed", versions.feed_version).document
+            except policy.StoredConfigError:
+                pinned = feed = None
 
         # A refused task is still recorded under the requested ID and the caller, so an
         # admin can see attempts on foreign tasks; the owner's history leaves them out.
@@ -173,6 +190,7 @@ class Gateway:
             versions.policy_version is None
             or versions.feed_version is None
             or not isinstance(pinned, Policy)
+            or not isinstance(feed, Feed)
         ):
             # Protected operations stay disabled until a valid policy and a feed are active.
             trail.record(_gateway(Decision.DENY, ReasonCode.INVALID_CONFIG, Stage.ADMISSION))
@@ -219,13 +237,14 @@ class Gateway:
         except AuditUnavailableError:
             self._abandon(context, trail)
             raise
-        return context, pinned
+        return context, pinned, feed
 
     async def _run(
         self,
         trail: RequestTrail,
         context: RequestContext,
         pinned: Policy,
+        feed: Feed,
         request: ExecuteRequest,
     ) -> ExecuteResponse:
         tool_access = access.check_tool(pinned, context, trail.tool)
@@ -233,8 +252,8 @@ class Gateway:
             trail.record(tool_access)
             return _denied(context, trail, tool_access.reason_code)
 
-        if not isinstance(request, DocumentReadRequest | DocumentSummarizeRequest):
-            raise ApiError(501, ReasonCode.NOT_IMPLEMENTED)  # artifacts.admit: A6
+        if isinstance(request, ArtifactAdmitRequest):
+            return await self._admit_artifact(trail, context, pinned, feed, request)
 
         # Without the local engine nothing may be returned or sent, so do not read at all.
         try:
@@ -333,6 +352,63 @@ class Gateway:
             adapter_calls=trail.calls,
             output=DocumentReadOutput(document_id=document.document_id, fields=shown.fields),
             redacted_fields=shown.removed,
+            usage=tuple(trail.usage),
+            audit_event_ids=tuple(trail.event_ids),
+        )
+
+    async def _admit_artifact(
+        self,
+        trail: RequestTrail,
+        context: RequestContext,
+        pinned: Policy,
+        feed: Feed,
+        request: ArtifactAdmitRequest,
+    ) -> ExecuteResponse:
+        """Manifest first; then one bounded read whose bytes are checked against the
+        manifest digest and the pinned feed, and only then parsed."""
+        if not pinned.controls.artifacts:
+            # Without the check nothing is admitted; the switch never lets artifacts through.
+            disabled = _artifacts(Decision.DENY, ReasonCode.TOOL_FORBIDDEN)
+            trail.record(disabled)
+            return _denied(context, trail, disabled.reason_code)
+
+        entry = self._manifest.get(request.arguments.artifact_id)
+        if entry is None:
+            trail.record(artifacts.blocked())
+            return _denied(context, trail, ReasonCode.ARTIFACT_BLOCKED)
+
+        trail.record(_artifacts(Decision.ALLOW, ReasonCode.OK), starting="artifact_admit")
+        started = time.perf_counter()
+        try:
+            data = await asyncio.to_thread(self._artifact_store.read, entry)
+        except ArtifactReadError as exc:
+            trail.finished("artifact_admit", ExecutionStatus.FAILED)
+            reason = (
+                ReasonCode.INPUT_TOO_LARGE
+                if isinstance(exc, ArtifactTooLarge)
+                else ReasonCode.UPSTREAM_FAILED
+            )
+            trail.record(
+                _artifacts(Decision.DENY, reason),
+                ExecutionStatus.FAILED,
+                latency_ms=_elapsed_ms(started),
+            )
+            return _denied(context, trail, reason)
+        trail.finished("artifact_admit", ExecutionStatus.SUCCEEDED)
+
+        result, digest = artifacts.check_bytes(entry, data, feed)
+        trail.record(result, ExecutionStatus.SUCCEEDED, latency_ms=_elapsed_ms(started))
+        if result.decision is Decision.DENY:
+            return _denied(context, trail, result.reason_code)
+        return ExecuteResponse(
+            request_id=context.request_id,
+            task_id=context.task_id,
+            decision=Decision.ALLOW,
+            reason_code=ReasonCode.OK,
+            policy_version=context.policy_version,
+            execution_status=ExecutionStatus.SUCCEEDED,
+            adapter_calls=trail.calls,
+            output=ArtifactAdmitOutput(artifact_id=entry.artifact_id, sha256=digest),
             usage=tuple(trail.usage),
             audit_event_ids=tuple(trail.event_ids),
         )
@@ -664,6 +740,15 @@ def _redaction(removed: tuple[str, ...], counts: dict[str, int], stage: Stage) -
         reason_code=ReasonCode.PII_REDACTED if changed else ReasonCode.OK,
         stage=stage,
         redacted_fields=removed,
+    )
+
+
+def _artifacts(decision: Decision, reason_code: ReasonCode) -> ControlResult:
+    return ControlResult(
+        control_id=ControlId.ARTIFACTS,
+        decision=decision,
+        reason_code=reason_code,
+        stage=Stage.ARTIFACT,
     )
 
 

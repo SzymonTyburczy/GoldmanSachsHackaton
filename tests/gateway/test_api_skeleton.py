@@ -66,21 +66,3 @@ def test_missing_idempotency_key_is_rejected(
 
     assert response.status_code == 422
     assert response.json()["errors"][0]["loc"] == ["header", "Idempotency-Key"]
-
-
-@pytest.mark.parametrize(
-    ("method", "path"),
-    [
-        ("GET", "/admin/feed"),
-        ("PUT", "/admin/feed"),
-        ("GET", "/admin/metrics"),
-        ("GET", "/admin/test-results"),
-    ],
-)
-def test_admin_skeleton_routes_refuse_with_not_implemented(
-    client: TestClient, headers: dict[str, dict[str, str]], method: str, path: str
-) -> None:
-    response = client.request(method, path, headers=headers["admin"])
-
-    assert response.status_code == 501
-    assert response.json()["reason_code"] == "NOT_IMPLEMENTED"
