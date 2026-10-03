@@ -56,7 +56,7 @@ from app.contracts import (
     utc_now,
 )
 from app.pii.engine import PII_ENTITIES, RECOGNIZERS_VERSION, SUPPORTED_LANGUAGES
-from app.pricing import PricingTable
+from app.pricing import JEV_MIN_RESERVED_INPUT_TOKENS, PricingTable
 from app.settings import Settings
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -101,6 +101,8 @@ def _switched_on(value: bool) -> bool:
 HardControl = Annotated[StrictBool, AfterValidator(_switched_on)]
 SummaryTimeout = Annotated[int, Field(strict=True, ge=1, le=120)]
 DetectorTimeout = Annotated[int, Field(strict=True, ge=1, le=60)]
+# Jev reservations must cover the confirmed maximum input envelope for this adapter/model.
+MIN_DETECTOR_RESERVED_INPUT_TOKENS = JEV_MIN_RESERVED_INPUT_TOKENS
 
 
 # --------------------------------------------------------------------------------------
@@ -135,7 +137,9 @@ class ModelsPolicy(StrictModel):
     summary_max_output_tokens: Annotated[int, Field(strict=True, ge=1, le=16384)]
     summary_reasoning_effort: Literal["low"]  # the Luna adapter sends effort=low
     summary_timeout_seconds: SummaryTimeout
-    detector_reserved_input_tokens: PositiveInt
+    detector_reserved_input_tokens: Annotated[
+        int, Field(strict=True, ge=MIN_DETECTOR_RESERVED_INPUT_TOKENS)
+    ]
     detector_timeout_seconds: DetectorTimeout
 
     @model_validator(mode="after")

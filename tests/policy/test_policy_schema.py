@@ -74,6 +74,7 @@ def test_policy_feeds_the_budget_and_pricing_modules() -> None:
         ("resources.max_requests_per_task", 0),
         ("budget.task_limit_nusd", "50000000"),
         ("models.summary_timeout_seconds", 600),
+        ("models.detector_reserved_input_tokens", 65535),
         # Only Jev and Luna, each in its own role.
         ("models.allowed", ["jev-1.13.0", "gpt-6-luna", "gpt-4o"]),
         ("models.allowed", ["jev-1.13.0", "jev-1.13.0", "gpt-6-luna"]),
