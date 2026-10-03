@@ -62,12 +62,15 @@ class OpenAILunaAdapter:
             ),
         )
 
-    async def summarize(self, *, input: str) -> SummaryResult:
+    async def summarize(self, *, input: str, max_output_tokens: int | None = None) -> SummaryResult:
         """Generate a bounded summary from an already-redacted complete input."""
+        output_limit = self._max_output_tokens if max_output_tokens is None else max_output_tokens
+        if isinstance(output_limit, bool) or not isinstance(output_limit, int) or output_limit <= 0:
+            raise ValueError("max_output_tokens must be a positive integer")
         response = await self._call(
             "create_response",
             input=input,
-            max_output_tokens=self._max_output_tokens,
+            max_output_tokens=output_limit,
         )
         status = getattr(response, "status", None)
         if status is not None and status != "completed":

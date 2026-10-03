@@ -5,13 +5,14 @@ from collections.abc import Mapping
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 
 from app import db
-from app.adapters.openai_luna import SummaryResult, TokenCount
+from app.adapters.openai_luna import OpenAILunaAdapter, SummaryResult, TokenCount
 from app.budget import BudgetLimits, balances, get_reservation
 from app.contracts import (
     BudgetUnit,
@@ -24,7 +25,7 @@ from app.contracts import (
     SemanticResult,
     Usage,
 )
-from app.pricing import DEFAULT_PRICING
+from app.pricing import DEFAULT_PRICING, reserve_openai_nusd
 from app.provider_calls import (
     InputTokenLimitExceeded,
     assess_with_budget,
@@ -139,6 +140,7 @@ class FakeLuna:
         self.summary_error = summary_error
         self.count_calls = 0
         self.summary_calls = 0
+        self.summary_max_output_tokens: int | None = None
 
     async def count_input_tokens(self, *, input: str) -> TokenCount:
         self.count_calls += 1
@@ -149,8 +151,9 @@ class FakeLuna:
             usage=_usage(Provider.OPENAI, input_tokens=self.token_count, output_tokens=None),
         )
 
-    async def summarize(self, *, input: str) -> SummaryResult:
+    async def summarize(self, *, input: str, max_output_tokens: int | None = None) -> SummaryResult:
         self.summary_calls += 1
+        self.summary_max_output_tokens = max_output_tokens
         if self.summary_error:
             raise self.summary_error
         return SummaryResult(
@@ -235,6 +238,7 @@ async def test_luna_counts_and_reserves_full_input_plus_output(db_path: Path) ->
 
     assert adapter.count_calls == 1
     assert adapter.summary_calls == 1
+    assert adapter.summary_max_output_tokens == 128
     assert counted.input_tokens == 85
     assert summary.text == "Synthetic summary."
     assert count_usage.cost_nusd == 0
@@ -246,6 +250,65 @@ async def test_luna_counts_and_reserves_full_input_plus_output(db_path: Path) ->
     assert balances(db_path, unit=BudgetUnit.NUSD, task_id=TASK_ID, principal_id=PRINCIPAL)[
         "global"
     ] == {"spent": 16_125, "reserved": 0}
+
+
+@pytest.mark.asyncio
+async def test_luna_reserves_and_sends_same_cap_when_adapter_default_differs(
+    db_path: Path,
+) -> None:
+    context = _setup(db_path)
+
+    class FakeResponses:
+        def __init__(self) -> None:
+            self.create_args: dict[str, Any] | None = None
+            self.input_tokens = SimpleNamespace(count=self.count)
+
+        async def count(self, **kwargs: Any) -> Any:
+            return SimpleNamespace(input_tokens=85)
+
+        async def create(self, **kwargs: Any) -> Any:
+            self.create_args = kwargs
+            return SimpleNamespace(
+                id="resp-cap-test",
+                model="gpt-6-luna",
+                output_text="Synthetic summary.",
+                status="completed",
+                output=(),
+                usage=SimpleNamespace(
+                    input_tokens=85,
+                    output_tokens=11,
+                    input_tokens_details=SimpleNamespace(cached_tokens=0),
+                ),
+            )
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.responses = FakeResponses()
+
+    client = FakeClient()
+    adapter = OpenAILunaAdapter(
+        "test-key",
+        max_output_tokens=64,
+        client=client,  # type: ignore[arg-type]
+    )
+    cap_used_for_reservation = 2048
+
+    *_, summary_reservation_id = await summarize_with_budget(
+        db_path=db_path,
+        context=context,
+        adapter=adapter,
+        input="already-redacted synthetic input",
+        limits=_limits(),
+        pricing=DEFAULT_PRICING,
+        max_input_tokens=8192,
+        max_output_tokens=cap_used_for_reservation,
+    )
+
+    reservation = get_reservation(db_path, summary_reservation_id)
+    assert reservation.amount == reserve_openai_nusd(85, cap_used_for_reservation, DEFAULT_PRICING)
+    assert client.responses.create_args is not None
+    assert client.responses.create_args["max_output_tokens"] == cap_used_for_reservation
+    assert client.responses.create_args["max_output_tokens"] != 64
 
 
 @pytest.mark.asyncio
