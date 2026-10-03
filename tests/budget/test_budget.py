@@ -112,6 +112,37 @@ def _reserve_fixture(db_path: Path, context: RequestContext, amount: int, lim: B
     )
 
 
+def test_nusd_reservation_rejects_stale_active_policy_limits(db_path: Path) -> None:
+    [context] = _prepare(db_path)
+    with closing(db.connect(db_path)) as conn, db.transaction(conn):
+        for version in (1, 2):
+            conn.execute(
+                """INSERT INTO config_versions
+                   (kind, version, body, sha256, created_at, created_by)
+                   VALUES ('policy', ?, '{}', ?, ?, 'test')""",
+                (version, "0" * 64, NOW),
+            )
+        conn.execute(
+            "INSERT INTO active_config (kind, version, activated_at) VALUES ('policy', 2, ?)",
+            (NOW,),
+        )
+
+    with pytest.raises(BudgetExceeded, match="active policy changed"):
+        reserve(
+            db_path,
+            context,
+            ReservationPurpose.DETECTOR,
+            BudgetUnit.NUSD,
+            42,
+            limits(),
+            pricing_version="standard-test",
+        )
+
+    assert balances(db_path, unit=BudgetUnit.NUSD, task_id=TASK_ID, principal_id=PRINCIPAL)[
+        "global"
+    ] == {"spent": 0, "reserved": 0}
+
+
 def test_atomic_twenty_parallel_reservations_allow_exactly_five(db_path: Path) -> None:
     contexts = _prepare(db_path, count=20)
     lim = limits(task=500, principal=500, global_=500)
