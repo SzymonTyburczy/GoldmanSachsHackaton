@@ -11,6 +11,7 @@ with another writer. Never hold a transaction open while calling an external pro
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.settings import Settings
@@ -22,6 +23,11 @@ BUSY_TIMEOUT_SECONDS = 5.0
 
 class SchemaVersionError(RuntimeError):
     """The database file was created with a schema this code does not know."""
+
+
+def to_db_time(value: datetime) -> str:
+    """Fixed-width UTC text, e.g. ``2026-10-03T16:00:00.000000Z``; sorts chronologically."""
+    return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def connect(db_path: Path) -> sqlite3.Connection:

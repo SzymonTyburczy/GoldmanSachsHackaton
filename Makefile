@@ -1,4 +1,4 @@
-# ControlProof developer commands. Implemented in A1: setup, dev, check, format, test.
+# ControlProof developer commands. Implemented: setup, dev, check, format, test.
 # Targets marked "not implemented" fail on purpose so they never look like a passed check.
 
 UV ?= uv
@@ -11,7 +11,7 @@ WITH_ENV = $$(test -f .env && echo --env-file=.env)
 .PHONY: help setup dev check format test test-live verify benchmark reload-config reset-demo
 
 help:
-	@echo "setup      install locked dependencies, create .env if missing, initialise the database"
+	@echo "setup      install locked dependencies, create .env, fill empty demo tokens, initialise the database"
 	@echo "dev        run the API and panel on http://$(HOST):$(PORT) (one process, one worker)"
 	@echo "check      Ruff lint and format check"
 	@echo "format     apply Ruff formatting and safe fixes"
@@ -22,6 +22,7 @@ help:
 setup:
 	$(UV) sync --locked
 	@test -f .env || { cp .env.example .env && chmod 600 .env && echo "Created .env from .env.example; fill in local values."; }
+	$(UV) run python -m app.auth .env
 	$(UV) run $(WITH_ENV) python -m app.db
 
 dev:

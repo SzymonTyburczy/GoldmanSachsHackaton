@@ -109,6 +109,7 @@ class Decision(StrEnum):
 class ReasonCode(StrEnum):
     OK = "OK"
     AUTH_REQUIRED = "AUTH_REQUIRED"
+    ADMIN_REQUIRED = "ADMIN_REQUIRED"  # authenticated, but the endpoint needs the admin role
     INVALID_INPUT = "INVALID_INPUT"
     TASK_FORBIDDEN = "TASK_FORBIDDEN"
     CLIENT_FORBIDDEN = "CLIENT_FORBIDDEN"
@@ -482,6 +483,17 @@ class CreateTaskRequest(StrictModel):
 
     schema_version: SchemaVersion
     client_id: Identifier
+
+
+class TaskResponse(StrictModel):
+    """Body returned by ``POST /v1/tasks`` and ``GET /v1/tasks/{task_id}``."""
+
+    schema_version: SchemaVersion = SCHEMA_VERSION
+    task_id: UUID
+    principal_id: Identifier
+    agent_id: Identifier
+    client_id: Identifier
+    created_at: UtcDatetime
 
 
 class ErrorDetail(StrictModel):

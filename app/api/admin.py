@@ -1,14 +1,16 @@
 """Admin API skeleton (docs/WSPOLNE_USTALENIA.md, section 5).
 
-Every route refuses with 501 ``NOT_IMPLEMENTED`` until its step is built.
+The router requires the admin role for every route, including ones added later.
+Each route refuses with 501 ``NOT_IMPLEMENTED`` until its step is built.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.errors import ApiError
+from app.auth import require_admin
 from app.contracts import ReasonCode
 
-router = APIRouter(prefix="/admin")
+router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
 
 def _not_implemented() -> ApiError:
