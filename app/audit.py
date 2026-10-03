@@ -25,7 +25,9 @@ from app.contracts import (
     AuditEventPage,
     ControlResult,
     ExecutionStatus,
+    SemanticResult,
     Tool,
+    Usage,
     utc_now,
 )
 
@@ -128,7 +130,8 @@ class RequestTrail:
     Identifiers come from the authenticated principal and, once known, from the stored
     task and the pinned configuration. ``calls`` is the execution status of each adapter
     so far. Every event carries a snapshot of it, so a denial after an adapter call still
-    shows that call.
+    shows that call. ``usage`` collects the provider usage of the stored events, which is
+    also what the response reports.
     """
 
     def __init__(self, db_path: Path, request_id: UUID, principal: Principal, tool: Tool) -> None:
@@ -136,13 +139,14 @@ class RequestTrail:
         self.request_id = request_id
         self._principal_id = principal.principal_id
         self._agent_id = principal.agent_id
-        self._tool = tool
+        self.tool = tool
         self.task_id: UUID | None = None
         self.client_id: str | None = None
         self.policy_version: int | None = None
         self.feed_version: int | None = None
         self.calls = AdapterCalls()
         self.event_ids: list[UUID] = []
+        self.usage: list[Usage] = []
 
     def record(
         self,
@@ -152,11 +156,15 @@ class RequestTrail:
         starting: AdapterName | None = None,
         latency_ms: int | None = None,
         entity_counts: Mapping[str, int] | None = None,
+        usage: tuple[Usage, ...] = (),
+        semantic: SemanticResult | None = None,
     ) -> None:
         """Store the outcome of one step.
 
         With ``starting`` the event is the intent record of that adapter: it is stored
         with the adapter ``STARTED``, and ``calls`` changes only after the write succeeds.
+        ``usage`` lists the provider calls this step reports; the event's ``model`` is the
+        model the provider named in the last of them.
         """
         calls = self.calls
         if starting is not None:
@@ -170,23 +178,26 @@ class RequestTrail:
             agent_id=self._agent_id,
             client_id=self.client_id,
             occurred_at=utc_now(),
-            tool=self._tool,
+            tool=self.tool,
             control_id=result.control_id,
             decision=result.decision,
             reason_code=result.reason_code,
             stage=result.stage,
             execution_status=execution_status,
             adapter_calls=calls,
+            usage=usage,
             latency_ms=latency_ms,
-            model=None,
+            model=usage[-1].model if usage else None,
             policy_version=self.policy_version,
             feed_version=self.feed_version,
             redacted_fields=result.redacted_fields,
             redacted_entity_counts=dict(entity_counts or {}),
+            semantic=semantic,
         )
         append(self._db_path, event)
         self.calls = calls
         self.event_ids.append(event.event_id)
+        self.usage.extend(usage)
 
     def finished(self, adapter: AdapterName, status: ExecutionStatus) -> None:
         """Note the real outcome of an adapter call, before its result event is written."""

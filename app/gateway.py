@@ -1,28 +1,53 @@
 """Gateway pipeline for ``POST /v1/execute`` (docs/WSPOLNE_USTALENIA.md, section 3).
 
-Built so far (A2–A4): steps 2–4 for documents, with an audit event at every step. The
-task, its owner and client come from the database. The active policy/feed versions are
-pinned and the request uses that one policy throughout. The role's tools and the document
-owner are checked before the adapter runs, and so is the local PII engine. After the read,
-fields outside the role's scope are removed, then the secret rule and Presidio replace
-sensitive fragments in the rest. The intent record is stored before the document adapter
-runs; without it the adapter is not called.
+Steps for documents, with an audit event at every step:
 
-Not built yet: idempotency, request limits, budget, Jev and Luna (A5), which take their
-input from ``redaction.prepare_provider_input``; artifacts (A6). Summaries and artifacts
-answer 501.
+2. The task, its owner and client come from the database. The active policy and feed are
+   pinned, and the request uses that one policy throughout. The request is stored with
+   its idempotency key within the request limits (``app.idempotency``).
+3. The role's tools and the document owner are checked before anything is read, and so
+   are the local PII engine and the provider keys.
+4. After the read the user's copy keeps the role's fields. Jev and Luna get only the
+   ``outbound_fields`` among them and the prompt. The secret rule and Presidio mask both.
+5–6. Jev assesses that redacted state once, after a reservation of its worst-case cost
+   (``app.provider_calls``). ``risk_score >= block_threshold`` denies. Any detector
+   failure denies, so the summary model is never called without an assessment.
+7. Luna counts the same input, its cost is reserved and Luna summarizes it once.
+8. The summary passes the secret rule and Presidio again before it is returned.
+
+Every provider call follows its reservation and is preceded by its intent record. It is
+bounded by the policy timeout. ``documents.read`` ends after the detector. Budget limits
+for each reservation are the pinned ones, lowered if an admin has activated lower limits
+since (section 6). Artifacts (A6) answer 501.
 """
 
+import asyncio
+import dataclasses
+import json
+import logging
+import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import closing
+from typing import Any
 from uuid import UUID
 
-from app import db, policy
-from app.adapters.documents import DocumentAdapter, DocumentCatalog, DocumentReadError
+import httpx
+import openai
+
+from app import budget, db, idempotency, policy, provider_calls
+from app.adapters.documents import (
+    CatalogEntry,
+    DocumentAdapter,
+    DocumentCatalog,
+    DocumentReadError,
+)
+from app.adapters.openai_luna import OpenAILunaError, SummaryResult, TokenCount
+from app.adapters.providers import KeyedProviders, Providers, Summarizer
 from app.api.errors import ApiError
 from app.audit import AdapterName, AuditUnavailableError, RequestTrail
 from app.auth import Principal
+from app.budget import BudgetLimits
 from app.contracts import (
     ControlId,
     ControlResult,
@@ -35,16 +60,23 @@ from app.contracts import (
     ExecutionStatus,
     ReasonCode,
     RequestContext,
+    SemanticResult,
     Stage,
+    SummaryOutput,
     Tool,
+    Usage,
     utc_now,
 )
-from app.controls import access
-from app.controls.redaction import redact_fields
+from app.controls import access, semantic
+from app.controls.redaction import ProviderInput, mask_text, prepare_provider_input, redact_fields
+from app.controls.semantic import SemanticCheckError, SemanticEvaluator
 from app.pii.engine import PiiEngine, PiiEngineUnavailable, get_engine
 from app.policy import Policy
+from app.prompts.semantic import SEMANTIC_QUESTIONS
 from app.settings import Settings
 from app.tasks import get_task
+
+logger = logging.getLogger(__name__)
 
 # Adapter whose status is the ``execution_status`` of each tool's response.
 TOOL_ADAPTERS: dict[Tool, AdapterName] = {
@@ -53,6 +85,12 @@ TOOL_ADAPTERS: dict[Tool, AdapterName] = {
     Tool.ARTIFACTS_ADMIT: "artifact_admit",
 }
 
+TIMEOUT_ERRORS = (TimeoutError, httpx.TimeoutException, openai.APITimeoutError)
+# Failures after which the detector result cannot be used. Budget refusals and audit
+# outages are handled separately.
+DETECTOR_ERRORS = (SemanticCheckError, provider_calls.ProviderCostUnavailable, ValueError)
+SUMMARY_ERRORS = (OpenAILunaError, provider_calls.ProviderCostUnavailable, ValueError)
+
 
 class Gateway:
     def __init__(
@@ -60,43 +98,58 @@ class Gateway:
         settings: Settings,
         catalog: DocumentCatalog,
         documents: DocumentAdapter,
+        providers: Providers | None = None,
         pii_engine: Callable[[tuple[str, ...]], PiiEngine] = get_engine,
     ) -> None:
-        self._settings = settings
+        self._db_path = settings.db_path
         self._catalog = catalog
         self._documents = documents
+        self._providers = providers or KeyedProviders(settings)
         self._pii_engine = pii_engine
 
-    def execute(
-        self, request_id: UUID, principal: Principal, request: ExecuteRequest
+    async def execute(
+        self,
+        request_id: UUID,
+        principal: Principal,
+        request: ExecuteRequest,
+        idempotency_key: UUID,
     ) -> ExecuteResponse:
-        tool = Tool(request.tool)
-        trail = RequestTrail(self._settings.db_path, request_id, principal, tool)
+        trail = RequestTrail(self._db_path, request_id, principal, Tool(request.tool))
         try:
-            context, pinned = self._admit(trail, principal, request.task_id)
+            admitted = self._admit(trail, principal, request, idempotency_key)
         except AuditUnavailableError:
             raise ApiError(503, ReasonCode.AUDIT_UNAVAILABLE) from None
+        if isinstance(admitted, ExecuteResponse):
+            return admitted
+        context, pinned = admitted
         try:
-            return self._run(trail, context, pinned, request)
+            response = await self._run(trail, context, pinned, request)
         except AuditUnavailableError:
             if not trail.anything_called:
+                self._abandon(context, trail)
                 raise ApiError(503, ReasonCode.AUDIT_UNAVAILABLE) from None
             # An adapter has already run, so the response must say so. Its output is
             # withheld because the audit trail of this request is incomplete.
-            return _denied(
-                context,
-                trail,
-                ReasonCode.AUDIT_UNAVAILABLE,
-                getattr(trail.calls, TOOL_ADAPTERS[tool]),
-            )
+            response = _denied(context, trail, ReasonCode.AUDIT_UNAVAILABLE)
+        except BaseException:
+            self._abandon(context, trail)
+            raise
+        self._complete(context, response)
+        return response
 
     def _admit(
-        self, trail: RequestTrail, principal: Principal, task_id: UUID
-    ) -> tuple[RequestContext, Policy]:
-        """Load the task, pin the active configuration and its policy; refuse before any
-        adapter."""
-        with closing(db.connect(self._settings.db_path)) as conn:
-            task = get_task(conn, task_id)
+        self,
+        trail: RequestTrail,
+        principal: Principal,
+        request: ExecuteRequest,
+        idempotency_key: UUID,
+    ) -> tuple[RequestContext, Policy] | ExecuteResponse:
+        """Load the task, pin the configuration and store the request, before any adapter.
+
+        Returns a response instead of a context for a replayed key or a request limit.
+        """
+        with closing(db.connect(self._db_path)) as conn:
+            task = get_task(conn, request.task_id)
             versions = policy.active_versions(conn)
             pinned = None
             if versions.policy_version is not None:
@@ -107,7 +160,7 @@ class Gateway:
 
         # A refused task is still recorded under the requested ID and the caller, so an
         # admin can see attempts on foreign tasks; the owner's history leaves them out.
-        trail.task_id = task_id
+        trail.task_id = request.task_id
         trail.policy_version = versions.policy_version
         trail.feed_version = versions.feed_version
         owner = access.check_task_owner(principal, task)
@@ -136,17 +189,46 @@ class Gateway:
             feed_version=versions.feed_version,
             created_at=utc_now(),
         )
-        trail.record(_gateway(Decision.ALLOW, ReasonCode.OK, Stage.ADMISSION))
+        claim = idempotency.claim(
+            self._db_path,
+            context,
+            tool=trail.tool,
+            key=idempotency_key,
+            digest=idempotency.request_digest(request),
+            resources=pinned.resources,
+            now=context.created_at,
+        )
+        match claim:
+            case idempotency.Replay(response):
+                return response
+            case idempotency.Pending():
+                raise ApiError(409, ReasonCode.REQUEST_PENDING)
+            case idempotency.Conflict():
+                raise ApiError(409, ReasonCode.IDEMPOTENCY_CONFLICT)
+            case idempotency.RateLimited(retry_after):
+                trail.record(_gateway(Decision.DENY, ReasonCode.RATE_LIMITED, Stage.ADMISSION))
+                raise ApiError(
+                    429, ReasonCode.RATE_LIMITED, headers={"Retry-After": str(retry_after)}
+                )
+            case idempotency.LimitReached(reason_code):
+                trail.record(_gateway(Decision.DENY, reason_code, Stage.ADMISSION))
+                return _denied(context, trail, reason_code)
+
+        try:
+            trail.record(_gateway(Decision.ALLOW, ReasonCode.OK, Stage.ADMISSION))
+        except AuditUnavailableError:
+            self._abandon(context, trail)
+            raise
         return context, pinned
 
-    def _run(
+    async def _run(
         self,
         trail: RequestTrail,
         context: RequestContext,
         pinned: Policy,
         request: ExecuteRequest,
     ) -> ExecuteResponse:
-        tool_access = access.check_tool(pinned, context, Tool(request.tool))
+        tool_access = access.check_tool(pinned, context, trail.tool)
         if tool_access.decision is Decision.DENY:
             trail.record(tool_access)
             return _denied(context, trail, tool_access.reason_code)
@@ -156,7 +238,7 @@ class Gateway:
 
         # Without the local engine nothing may be returned or sent, so do not read at all.
         try:
-            engine = self._pii_engine(pinned.redaction.languages)
+            engine = await asyncio.to_thread(self._pii_engine, pinned.redaction.languages)
         except PiiEngineUnavailable:
             trail.record(_redaction_unavailable(Stage.PRE_DOCUMENT))
             return _denied(context, trail, ReasonCode.PII_ENGINE_UNAVAILABLE)
@@ -167,9 +249,23 @@ class Gateway:
             trail.record(document_access)
             return _denied(context, trail, document_access.reason_code)
 
+        # A document that could not be assessed is not read: the detector is required for
+        # every tool, and the summary model for summaries.
+        providers = self._providers.connect(pinned.models)
+        detector = providers.detector
+        if detector is None:
+            trail.record(
+                _semantic(Decision.DENY, ReasonCode.DETECTOR_UNAVAILABLE, Stage.PRE_DOCUMENT)
+            )
+            return _denied(context, trail, ReasonCode.DETECTOR_UNAVAILABLE)
+        prompt = summarizer = None
         if isinstance(request, DocumentSummarizeRequest):
-            trail.record(document_access)
-            raise ApiError(501, ReasonCode.NOT_IMPLEMENTED)  # Jev and Luna: A5
+            prompt, summarizer = request.arguments.prompt, providers.summarizer
+            if summarizer is None:
+                trail.record(
+                    _gateway(Decision.DENY, ReasonCode.UPSTREAM_FAILED, Stage.PRE_DOCUMENT)
+                )
+                return _denied(context, trail, ReasonCode.UPSTREAM_FAILED)
 
         trail.record(document_access, starting="document_read")
         started = time.perf_counter()
@@ -182,54 +278,392 @@ class Gateway:
                 ExecutionStatus.FAILED,
                 latency_ms=_elapsed_ms(started),
             )
-            return _denied(context, trail, ReasonCode.UPSTREAM_FAILED, ExecutionStatus.FAILED)
+            return _denied(context, trail, ReasonCode.UPSTREAM_FAILED)
         trail.finished("document_read", ExecutionStatus.SUCCEEDED)
-        latency_ms = _elapsed_ms(started)
+        read_ms = _elapsed_ms(started)
 
         try:
-            redacted = redact_fields(
-                fields, pinned.fields_for(context.role), pinned.redaction, engine
+            prepared = await asyncio.to_thread(
+                prepare_provider_input, fields, prompt, context.role, pinned, engine
             )
+            shown = None
+            if summarizer is None:
+                shown = await asyncio.to_thread(
+                    redact_fields, fields, pinned.fields_for(context.role), pinned.redaction, engine
+                )
         except PiiEngineUnavailable:
             trail.record(
                 _redaction_unavailable(Stage.PRE_DETECTOR),
                 ExecutionStatus.SUCCEEDED,
-                latency_ms=latency_ms,
+                latency_ms=read_ms,
             )
-            return _denied(
-                context, trail, ReasonCode.PII_ENGINE_UNAVAILABLE, ExecutionStatus.SUCCEEDED
-            )
+            return _denied(context, trail, ReasonCode.PII_ENGINE_UNAVAILABLE)
 
-        redaction = ControlResult(
-            control_id=ControlId.REDACTION,
-            decision=Decision.REDACT if redacted.changed else Decision.ALLOW,
-            reason_code=ReasonCode.PII_REDACTED if redacted.changed else ReasonCode.OK,
-            stage=Stage.PRE_DETECTOR,
-            redacted_fields=redacted.removed,
+        # A read reports what the user gets; a summary reports what the providers get.
+        removed, counts = (
+            (prepared.removed, prepared.entity_counts)
+            if shown is None
+            else (shown.removed, shown.entity_counts)
         )
+        input_redaction = _redaction(removed, counts, Stage.PRE_DETECTOR)
         trail.record(
-            redaction,
-            ExecutionStatus.SUCCEEDED,
-            latency_ms=latency_ms,
-            entity_counts=redacted.entity_counts,
+            input_redaction, ExecutionStatus.SUCCEEDED, latency_ms=read_ms, entity_counts=counts
         )
+
+        state = prepared.detector_state(_trusted_task(trail.tool, document, context))
+        if _state_chars(state) > pinned.resources.max_detector_state_chars:
+            trail.record(_budget(Decision.DENY, ReasonCode.INPUT_TOO_LARGE, Stage.PRE_DETECTOR))
+            return _denied(context, trail, ReasonCode.INPUT_TOO_LARGE)
+
+        denied = await self._detect(trail, context, pinned, detector, state)
+        if denied is not None:
+            return denied
+
+        if summarizer is not None:
+            return await self._summarize(
+                trail, context, pinned, summarizer, engine, document, prepared, input_redaction
+            )
         return ExecuteResponse(
             request_id=context.request_id,
             task_id=context.task_id,
-            decision=redaction.decision,
-            reason_code=redaction.reason_code,
+            decision=input_redaction.decision,
+            reason_code=input_redaction.reason_code,
             policy_version=context.policy_version,
             execution_status=ExecutionStatus.SUCCEEDED,
             adapter_calls=trail.calls,
-            output=DocumentReadOutput(document_id=document.document_id, fields=redacted.fields),
-            redacted_fields=redacted.removed,
+            output=DocumentReadOutput(document_id=document.document_id, fields=shown.fields),
+            redacted_fields=shown.removed,
+            usage=tuple(trail.usage),
             audit_event_ids=tuple(trail.event_ids),
         )
+
+    async def _detect(
+        self,
+        trail: RequestTrail,
+        context: RequestContext,
+        pinned: Policy,
+        detector: SemanticEvaluator,
+        state: dict[str, str],
+    ) -> ExecuteResponse | None:
+        """Steps 5–6: reserve, call Jev once and apply the policy threshold. Returns the
+        denial, or ``None`` when the request may continue."""
+        limits = self._limits(trail, context, pinned, Stage.PRE_DETECTOR)
+        if isinstance(limits, ExecuteResponse):
+            return limits
+        threshold = pinned.semantic.block_threshold
+        calls = _TrackedDetector(trail, detector, threshold, pinned.models.detector_timeout_seconds)
+        try:
+            result, usage, _ = await provider_calls.assess_with_budget(
+                db_path=self._db_path,
+                context=context,
+                adapter=calls,
+                state=state,
+                limits=limits,
+                pricing=pinned.pricing.table(),
+                max_detector_input_tokens=pinned.models.detector_reserved_input_tokens,
+            )
+        except budget.BudgetExceeded as exc:
+            trail.record(_budget(Decision.DENY, exc.reason_code, Stage.PRE_DETECTOR))
+            return _denied(context, trail, exc.reason_code)
+        except (*DETECTOR_ERRORS, TimeoutError):
+            trail.record(
+                _semantic(Decision.DENY, ReasonCode.DETECTOR_UNAVAILABLE, Stage.PRE_DETECTOR),
+                trail.calls.detector,
+                latency_ms=calls.latency_ms,
+                usage=calls.usage(),
+            )
+            return _denied(context, trail, ReasonCode.DETECTOR_UNAVAILABLE)
+
+        blocked = result.risk_score >= threshold
+        trail.record(
+            _semantic(
+                Decision.DENY if blocked else Decision.ALLOW,
+                ReasonCode.SEMANTIC_RISK if blocked else ReasonCode.OK,
+                Stage.PRE_DETECTOR,
+            ),
+            ExecutionStatus.SUCCEEDED,
+            latency_ms=calls.latency_ms,
+            usage=(usage,),
+            semantic=result,
+        )
+        if blocked:
+            return _denied(context, trail, ReasonCode.SEMANTIC_RISK)
+        return None
+
+    async def _summarize(
+        self,
+        trail: RequestTrail,
+        context: RequestContext,
+        pinned: Policy,
+        summarizer: Summarizer,
+        engine: PiiEngine,
+        document: CatalogEntry,
+        prepared: ProviderInput,
+        input_redaction: ControlResult,
+    ) -> ExecuteResponse:
+        """Steps 7–8: count, reserve and summarize once, then filter the output."""
+        limits = self._limits(trail, context, pinned, Stage.PRE_SUMMARY)
+        if isinstance(limits, ExecuteResponse):
+            return limits
+        calls = _TrackedSummarizer(trail, summarizer, pinned.models.summary_timeout_seconds)
+        try:
+            result = await provider_calls.summarize_with_budget(
+                db_path=self._db_path,
+                context=context,
+                adapter=calls,
+                input=prepared.summary_input(),
+                limits=limits,
+                pricing=pinned.pricing.table(),
+                max_input_tokens=pinned.resources.max_summary_input_tokens,
+                max_output_tokens=pinned.models.summary_max_output_tokens,
+            )
+        except budget.BudgetExceeded as exc:
+            trail.record(
+                _budget(Decision.DENY, exc.reason_code, Stage.PRE_SUMMARY), usage=calls.usage()
+            )
+            return _denied(context, trail, exc.reason_code)
+        except provider_calls.InputTokenLimitExceeded:
+            trail.record(
+                _budget(Decision.DENY, ReasonCode.INPUT_TOO_LARGE, Stage.PRE_SUMMARY),
+                trail.calls.token_count,
+                latency_ms=calls.latency_ms,
+                usage=calls.usage(),
+            )
+            return _denied(context, trail, ReasonCode.INPUT_TOO_LARGE)
+        except (*SUMMARY_ERRORS, TimeoutError) as exc:
+            if trail.calls.token_count is not ExecutionStatus.SUCCEEDED:
+                failed = _budget(
+                    Decision.DENY, ReasonCode.TOKEN_COUNT_UNAVAILABLE, Stage.PRE_SUMMARY
+                )
+                status = trail.calls.token_count
+            else:
+                reason = (
+                    ReasonCode.UPSTREAM_TIMEOUT if _timed_out(exc) else ReasonCode.UPSTREAM_FAILED
+                )
+                failed = _gateway(Decision.DENY, reason, Stage.POST_OUTPUT)
+                status = trail.calls.summary
+            trail.record(failed, status, latency_ms=calls.latency_ms, usage=calls.usage())
+            return _denied(context, trail, failed.reason_code)
+
+        _, summary, count_usage, summary_usage, _, _ = result
+        usage = (count_usage, summary_usage)
+        try:
+            text, found = await asyncio.to_thread(mask_text, summary.text, pinned.redaction, engine)
+        except PiiEngineUnavailable:
+            trail.record(
+                _redaction_unavailable(Stage.POST_OUTPUT),
+                ExecutionStatus.SUCCEEDED,
+                latency_ms=calls.latency_ms,
+                usage=usage,
+            )
+            return _denied(context, trail, ReasonCode.PII_ENGINE_UNAVAILABLE)
+        counts = dict(sorted(found.items()))
+        output_redaction = _redaction((), counts, Stage.POST_OUTPUT)
+        trail.record(
+            output_redaction,
+            ExecutionStatus.SUCCEEDED,
+            latency_ms=calls.latency_ms,
+            entity_counts=counts,
+            usage=usage,
+        )
+
+        redacted = Decision.REDACT in (input_redaction.decision, output_redaction.decision)
+        return ExecuteResponse(
+            request_id=context.request_id,
+            task_id=context.task_id,
+            decision=Decision.REDACT if redacted else Decision.ALLOW,
+            reason_code=ReasonCode.PII_REDACTED if redacted else ReasonCode.OK,
+            policy_version=context.policy_version,
+            execution_status=ExecutionStatus.SUCCEEDED,
+            adapter_calls=trail.calls,
+            output=SummaryOutput(document_id=document.document_id, text=text),
+            redacted_fields=prepared.removed,
+            usage=tuple(trail.usage),
+            audit_event_ids=tuple(trail.event_ids),
+        )
+
+    def _limits(
+        self, trail: RequestTrail, context: RequestContext, pinned: Policy, stage: Stage
+    ) -> BudgetLimits | ExecuteResponse:
+        """Limits for the next reservation: the pinned policy's, each lowered to the active
+        policy's value if an admin has activated another version since (section 6)."""
+        own = pinned.budget_limits(context.policy_version)
+        with closing(db.connect(self._db_path)) as conn:
+            version = policy.active_versions(conn).policy_version
+            if version == context.policy_version:
+                return own
+            try:
+                latest = None if version is None else policy.load(conn, "policy", version)
+            except policy.StoredConfigError:
+                latest = None
+        if latest is None:
+            trail.record(_budget(Decision.DENY, ReasonCode.INVALID_CONFIG, stage))
+            return _denied(context, trail, ReasonCode.INVALID_CONFIG)
+        current = latest.document.budget_limits(latest.version)
+        lowest = {
+            field.name: min(getattr(own, field.name), getattr(current, field.name))
+            for field in dataclasses.fields(BudgetLimits)
+            if field.name != "limit_version"
+        }
+        return BudgetLimits(**lowest, limit_version=latest.version)
+
+    def _complete(self, context: RequestContext, response: ExecuteResponse) -> None:
+        try:
+            idempotency.complete(self._db_path, context.request_id, response)
+        except sqlite3.Error as exc:
+            # The row stays IN_PROGRESS: a retry with the key is answered as pending.
+            logger.error(
+                "response not stored: request_id=%s error=%s",
+                context.request_id,
+                type(exc).__name__,
+            )
+
+    def _abandon(self, context: RequestContext, trail: RequestTrail) -> None:
+        try:
+            idempotency.abandon(self._db_path, context.request_id, executed=trail.anything_called)
+        except sqlite3.Error as exc:
+            logger.error(
+                "request not released: request_id=%s error=%s",
+                context.request_id,
+                type(exc).__name__,
+            )
+
+
+class _TrackedCalls:
+    """Provider adapters as ``app.provider_calls`` calls them, after a reservation.
+
+    Each call is preceded by its intent record, bounded by the policy timeout and its
+    outcome is noted in the trail. The usage each adapter reported is kept for the audit
+    of a failure that ``app.provider_calls`` raises after the call.
+    """
+
+    def __init__(self, trail: RequestTrail, stage: Stage, timeout_seconds: int) -> None:
+        self._trail = trail
+        self._stage = stage
+        self._timeout = timeout_seconds
+        self.latency_ms: int | None = None
+        self._usage: list[Usage] = []
+
+    async def _call(self, adapter: AdapterName, start: Callable[[], Awaitable[Any]]) -> Any:
+        self._trail.record(_budget(Decision.ALLOW, ReasonCode.OK, self._stage), starting=adapter)
+        started = time.perf_counter()
+        try:
+            async with asyncio.timeout(self._timeout):
+                result = await start()
+        except BaseException as exc:
+            self.latency_ms = _elapsed_ms(started)
+            status = ExecutionStatus.UNKNOWN if _uncertain(exc) else ExecutionStatus.FAILED
+            self._trail.finished(adapter, status)
+            raise
+        self.latency_ms = _elapsed_ms(started)
+        self._trail.finished(adapter, ExecutionStatus.SUCCEEDED)
+        return result
+
+    def usage(self) -> tuple[Usage, ...]:
+        """Usage as the adapters reported it, before ``app.provider_calls`` priced it."""
+        return tuple(self._usage)
+
+
+class _TrackedDetector(_TrackedCalls):
+    def __init__(
+        self,
+        trail: RequestTrail,
+        detector: SemanticEvaluator,
+        threshold: float,
+        timeout_seconds: int,
+    ) -> None:
+        super().__init__(trail, Stage.PRE_DETECTOR, timeout_seconds)
+        self._detector = detector
+        self._threshold = threshold
+
+    async def assess(self, state: dict[str, str]) -> tuple[SemanticResult, Usage]:
+        result, usage = await self._call(
+            "detector",
+            lambda: semantic.evaluate(self._detector, state=state, block_threshold=self._threshold),
+        )
+        self._usage.append(usage)
+        return result, usage
+
+
+class _TrackedSummarizer(_TrackedCalls):
+    def __init__(self, trail: RequestTrail, summarizer: Summarizer, timeout_seconds: int) -> None:
+        super().__init__(trail, Stage.PRE_SUMMARY, timeout_seconds)
+        self._summarizer = summarizer
+
+    async def count_input_tokens(self, *, input: str) -> TokenCount:
+        count = await self._call(
+            "token_count", lambda: self._summarizer.count_input_tokens(input=input)
+        )
+        self._usage.append(count.usage)
+        return count
+
+    async def summarize(self, *, input: str, **options: int) -> SummaryResult:
+        summary = await self._call(
+            "summary", lambda: self._summarizer.summarize(input=input, **options)
+        )
+        self._usage.append(summary.usage)
+        return summary
+
+
+def _trusted_task(tool: Tool, document: CatalogEntry, context: RequestContext) -> str:
+    """Server-written description of the allowed task for Jev; no client text."""
+    action = "Summarize" if tool is Tool.DOCUMENTS_SUMMARIZE else "Read"
+    return (
+        f"{action} document {document.document_id} of client {context.client_id} for a user"
+        f" with the {context.role.value} role. Only the supplied document may be used;"
+        " nothing may be sent, disclosed or retrieved beyond it."
+    )
+
+
+def _state_chars(state: dict[str, str]) -> int:
+    """Size of what Jev receives: the state and the fixed questions."""
+    return len(json.dumps({"state": state, "questions": SEMANTIC_QUESTIONS}))
+
+
+def _timed_out(exc: BaseException) -> bool:
+    """Whether a timeout caused ``exc``. Adapters re-raise their own errors ``from None``,
+    which still keeps the original in ``__context__``."""
+    current: BaseException | None = exc
+    for _ in range(8):
+        if current is None:
+            return False
+        if isinstance(current, TIMEOUT_ERRORS):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _uncertain(exc: BaseException) -> bool:
+    """The provider may have processed (and billed) a call that timed out or was cut off."""
+    return isinstance(exc, asyncio.CancelledError) or _timed_out(exc)
 
 
 def _gateway(decision: Decision, reason_code: ReasonCode, stage: Stage) -> ControlResult:
     return ControlResult(
         control_id=ControlId.GATEWAY, decision=decision, reason_code=reason_code, stage=stage
+    )
+
+
+def _budget(decision: Decision, reason_code: ReasonCode, stage: Stage) -> ControlResult:
+    return ControlResult(
+        control_id=ControlId.BUDGET, decision=decision, reason_code=reason_code, stage=stage
+    )
+
+
+def _semantic(decision: Decision, reason_code: ReasonCode, stage: Stage) -> ControlResult:
+    return ControlResult(
+        control_id=ControlId.SEMANTIC, decision=decision, reason_code=reason_code, stage=stage
+    )
+
+
+def _redaction(removed: tuple[str, ...], counts: dict[str, int], stage: Stage) -> ControlResult:
+    changed = bool(removed or counts)
+    return ControlResult(
+        control_id=ControlId.REDACTION,
+        decision=Decision.REDACT if changed else Decision.ALLOW,
+        reason_code=ReasonCode.PII_REDACTED if changed else ReasonCode.OK,
+        stage=stage,
+        redacted_fields=removed,
     )
 
 
@@ -247,19 +681,19 @@ def _elapsed_ms(started: float) -> int:
 
 
 def _denied(
-    context: RequestContext,
-    trail: RequestTrail,
-    reason_code: ReasonCode,
-    status: ExecutionStatus = ExecutionStatus.NOT_CALLED,
+    context: RequestContext, trail: RequestTrail, reason_code: ReasonCode
 ) -> ExecuteResponse:
+    """A denial; ``execution_status`` is that of the tool's own adapter so far, and
+    ``usage`` lists the provider calls already made."""
     return ExecuteResponse(
         request_id=context.request_id,
         task_id=context.task_id,
         decision=Decision.DENY,
         reason_code=reason_code,
         policy_version=context.policy_version,
-        execution_status=status,
+        execution_status=getattr(trail.calls, TOOL_ADAPTERS[trail.tool]),
         adapter_calls=trail.calls,
         output=None,
+        usage=tuple(trail.usage),
         audit_event_ids=tuple(trail.event_ids),
     )

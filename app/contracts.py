@@ -129,6 +129,9 @@ class ReasonCode(StrEnum):
     UPSTREAM_TIMEOUT = "UPSTREAM_TIMEOUT"
     AUDIT_UNAVAILABLE = "AUDIT_UNAVAILABLE"
     VERSION_CONFLICT = "VERSION_CONFLICT"  # expected_version is no longer the active one
+    RATE_LIMITED = "RATE_LIMITED"  # 429: too many requests per minute for this principal
+    IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"  # 409: key reused for a different request
+    REQUEST_PENDING = "REQUEST_PENDING"  # 409: same request still running or unresolved
     # Returned only by API routes that are still skeletons; never by a control.
     NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
 
