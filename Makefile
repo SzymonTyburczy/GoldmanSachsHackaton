@@ -20,7 +20,7 @@ help:
 	@echo "test       offline tests; network to TypeSafe and OpenAI is blocked"
 	@echo "test-live  paid Luna smoke test and 12-sample Jev evaluation (requires local API keys)"
 	@echo "verify     check + test + test-live"
-	@echo "benchmark  100 offline component measurements; use LIVE=1 for the budgeted 12-case provider run"
+	@echo "benchmark  100 offline measurements; use LIVE=1 for provider and GATEWAY=1 for full gateway cases"
 	@echo "reload-config  validate config/policy.json and config/threat-feed.json, activate changes"
 
 setup:
@@ -53,9 +53,12 @@ test-live:
 verify: check test test-live
 
 benchmark:
-	@if [ "$(LIVE)" = "1" ]; then \
+	@if [ "$(LIVE)" = "1" ] || [ "$(GATEWAY)" = "1" ]; then \
 		$(UV) run $(WITH_ENV) python -m scripts.check_live_credentials && \
-		$(UV) run $(WITH_ENV) python -m scripts.benchmark --live --iterations $(ITERATIONS); \
+		$(UV) run $(WITH_ENV) python -m scripts.benchmark \
+			$(if $(filter 1,$(LIVE)),--live,) \
+			$(if $(filter 1,$(GATEWAY)),--gateway-live,) \
+			--iterations $(ITERATIONS); \
 	else \
 		$(UV) run $(WITH_ENV) python -m scripts.benchmark --iterations $(ITERATIONS); \
 	fi
