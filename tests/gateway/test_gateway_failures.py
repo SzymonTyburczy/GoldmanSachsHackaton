@@ -73,7 +73,7 @@ def test_protected_operations_need_an_active_policy_and_feed(
     active: list[str],
 ) -> None:
     for kind in active:
-        activate_config(db_path, kind, 1)
+        activate_config(db_path, kind)
 
     response = execute("analyst-a", new_task("analyst-a"), "documents.read", document_id="doc-a")
 

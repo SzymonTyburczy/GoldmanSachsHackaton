@@ -172,7 +172,7 @@ def test_attempts_on_foreign_and_unknown_tasks_are_recorded_for_the_admin(
 def test_missing_configuration_is_recorded(
     client: TestClient, headers: Headers, db_path: Path, new_task: NewTask, execute: Execute
 ) -> None:
-    activate_config(db_path, "policy", 1)  # feed missing
+    activate_config(db_path, "policy")  # feed missing
 
     response = execute("analyst-a", new_task("analyst-a"), "documents.read", document_id="doc-a")
 

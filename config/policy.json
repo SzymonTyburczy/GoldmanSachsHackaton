@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "controls": {
+    "access": true,
+    "redaction": true,
+    "semantic": true,
+    "budget": true,
+    "artifacts": true
+  },
+  "semantic": {
+    "block_threshold": 0.8,
+    "on_error": "deny"
+  },
+  "models": {
+    "allowed": ["jev-1.13.0", "gpt-6-luna"],
+    "detector": "jev-1.13.0",
+    "summary": "gpt-6-luna",
+    "summary_max_output_tokens": 2048,
+    "summary_reasoning_effort": "low",
+    "summary_timeout_seconds": 30,
+    "detector_reserved_input_tokens": 65536,
+    "detector_timeout_seconds": 10
+  },
+  "resources": {
+    "max_summary_input_tokens": 8192,
+    "max_detector_state_chars": 12000,
+    "max_requests_per_task": 20,
+    "max_provider_calls_per_task": 40,
+    "max_concurrency_per_principal": 2,
+    "max_tasks_per_principal": 10,
+    "max_requests_per_minute_per_principal": 30
+  },
+  "budget": {
+    "task_limit_nusd": 50000000,
+    "principal_limit_nusd": 200000000,
+    "global_limit_nusd": 500000000
+  },
+  "acl": {
+    "analyst": {
+      "tools": ["documents.read", "documents.summarize"],
+      "fields": ["company_name", "status", "notes"]
+    },
+    "reviewer": {
+      "tools": ["documents.read", "documents.summarize"],
+      "fields": ["company_name", "status", "notes", "review_note"]
+    },
+    "admin": {
+      "tools": ["documents.read", "documents.summarize", "artifacts.admit"],
+      "fields": ["company_name", "status", "notes", "review_note"]
+    }
+  },
+  "outbound_fields": ["company_name", "status", "notes"],
+  "redaction": {
+    "engine": "presidio",
+    "recognizers_version": "controlproof-pii-1",
+    "languages": ["en", "pl"],
+    "entities": {
+      "EMAIL_ADDRESS": {"threshold": 0.5, "placeholder": "<EMAIL_ADDRESS>"},
+      "PHONE_NUMBER": {"threshold": 0.4, "placeholder": "<PHONE_NUMBER>"},
+      "IBAN_CODE": {"threshold": 0.5, "placeholder": "<IBAN_CODE>"},
+      "CREDIT_CARD": {"threshold": 0.5, "placeholder": "<CREDIT_CARD>"},
+      "PL_PESEL": {"threshold": 0.5, "placeholder": "<PL_PESEL>"}
+    },
+    "secret_placeholder": "<SECRET>"
+  },
+  "pricing": {
+    "version": "standard-2026-10-03",
+    "verified_on": "2026-10-03",
+    "mode": "standard",
+    "source_urls": [
+      "https://developers.openai.com/api/docs/pricing",
+      "https://docs.typesafe.ai/models"
+    ],
+    "typesafe_model": "jev-1.13.0",
+    "openai_model": "gpt-6-luna",
+    "typesafe_input_nusd_per_token": 42,
+    "openai_input_nusd_per_token": 100,
+    "openai_cached_input_nusd_per_token": 10,
+    "openai_cache_write_nusd_per_token": 125,
+    "openai_output_nusd_per_token": 500,
+    "openai_long_context_threshold": 272000,
+    "openai_long_input_nusd_per_token": 200,
+    "openai_long_cached_input_nusd_per_token": 20,
+    "openai_long_cache_write_nusd_per_token": 250,
+    "openai_long_output_nusd_per_token": 750
+  }
+}

@@ -11,8 +11,9 @@ from app.adapters.documents import (
     DocumentCatalog,
     DocumentReadError,
 )
-from app.controls.access import READABLE_FIELDS
+from app.contracts import Role
 from app.settings import DEFAULT_DOCUMENTS_DIR
+from tests.gateway.support import config_document
 
 ALWAYS_REMOVED = {"email", "personal_id", "secret"}
 
@@ -60,9 +61,10 @@ def test_synthetic_documents_hold_the_sensitive_fields_that_must_be_removed() ->
         entry = DocumentCatalog.load(DEFAULT_DOCUMENTS_DIR).get(document_id)
         assert entry is not None
         fields = adapter.read(entry)
-        assert set(fields) >= ALWAYS_REMOVED | READABLE_FIELDS["reviewer"]
-        for scope in READABLE_FIELDS.values():
-            assert not scope & ALWAYS_REMOVED
+        policy = config_document("policy")
+        assert set(fields) >= ALWAYS_REMOVED | policy.fields_for(Role.REVIEWER)
+        for role in Role:
+            assert not policy.fields_for(role) & ALWAYS_REMOVED
 
 
 def test_adapter_counts_every_call_including_failures(tmp_path: Path) -> None:

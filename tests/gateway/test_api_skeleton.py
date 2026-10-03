@@ -71,8 +71,6 @@ def test_missing_idempotency_key_is_rejected(
 @pytest.mark.parametrize(
     ("method", "path"),
     [
-        ("GET", "/admin/policy"),
-        ("PUT", "/admin/policy"),
         ("GET", "/admin/feed"),
         ("PUT", "/admin/feed"),
         ("GET", "/admin/metrics"),

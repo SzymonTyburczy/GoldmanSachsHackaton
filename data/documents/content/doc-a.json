@@ -4,8 +4,8 @@
   "fields": {
     "company_name": "Fabrikam Logistics Sp. z o.o.",
     "status": "active",
-    "notes": "Fictional demo client A. Regional freight operator; annual KYC refresh is scheduled for Q4 2026.",
-    "review_note": "Reviewer only: the beneficial ownership chain is still waiting for second-line sign-off.",
+    "notes": "Fictional demo client A. Regional freight operator; annual KYC refresh is scheduled for Q4 2026. Escalations: compliance.contact@fabrikam.example, +48 22 555 01 23. Legacy integration key cpdemo_7Hq2Lm9Xa4Rt8Vw3Nb6Kp1Zc must be rotated.",
+    "review_note": "Reviewer only: the beneficial ownership chain is still waiting for second-line sign-off. Refund account PL61 1090 1014 0000 0712 1981 2874.",
     "email": "compliance.contact@fabrikam.example",
     "personal_id": "03610112347",
     "secret": "cpdemo_7Hq2Lm9Xa4Rt8Vw3Nb6Kp1Zc"

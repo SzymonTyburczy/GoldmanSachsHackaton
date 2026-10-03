@@ -1,4 +1,5 @@
 # ControlProof developer commands. Live checks make real, billable provider requests.
+# reset-demo is not implemented yet and fails on purpose so it never looks like a passed check.
 
 UV ?= uv
 HOST ?= 127.0.0.1
@@ -8,10 +9,11 @@ ITERATIONS ?= 100
 WITH_ENV = $$(test -f .env && echo --env-file=.env)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup dev check format test test-live verify benchmark reload-config reset-demo
+.PHONY: help setup dev check format test test-live verify reload-config benchmark reset-demo
 
 help:
-	@echo "setup      install locked dependencies, create .env, fill empty demo tokens, initialise the database"
+	@echo "setup      install locked dependencies, create .env, fill empty demo tokens, initialise the"
+	@echo "           database, activate config/ if nothing is active, check the local Presidio engine"
 	@echo "dev        run the API and panel on http://$(HOST):$(PORT) (one process, one worker)"
 	@echo "check      Ruff lint and format check"
 	@echo "format     apply Ruff formatting and safe fixes"
@@ -19,12 +21,15 @@ help:
 	@echo "test-live  paid Luna smoke test and 12-sample Jev evaluation (requires local API keys)"
 	@echo "verify     check + test + test-live"
 	@echo "benchmark  100 offline component measurements; use LIVE=1 for the budgeted 12-case provider run"
+	@echo "reload-config  validate config/policy.json and config/threat-feed.json, activate changes"
 
 setup:
 	$(UV) sync --locked
 	@test -f .env || { cp .env.example .env && chmod 600 .env && echo "Created .env from .env.example; fill in local values."; }
 	$(UV) run python -m app.auth .env
 	$(UV) run $(WITH_ENV) python -m app.db
+	$(UV) run $(WITH_ENV) python -m app.policy seed
+	$(UV) run python -m app.pii.engine
 
 dev:
 	$(UV) run $(WITH_ENV) uvicorn --factory app.main:create_app --host $(HOST) --port $(PORT)
@@ -55,5 +60,8 @@ benchmark:
 		$(UV) run $(WITH_ENV) python -m scripts.benchmark --iterations $(ITERATIONS); \
 	fi
 
-reload-config reset-demo:
+reload-config:
+	$(UV) run $(WITH_ENV) python -m app.policy reload
+
+reset-demo:
 	@echo "$@ is not implemented yet." >&2; exit 1

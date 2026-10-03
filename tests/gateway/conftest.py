@@ -29,8 +29,8 @@ def headers() -> dict[str, dict[str, str]]:
 
 @pytest.fixture
 def active_config(client: TestClient, db_path: Path) -> None:
-    activate_config(db_path, "policy", 1)
-    activate_config(db_path, "feed", 1)
+    activate_config(db_path, "policy")
+    activate_config(db_path, "feed")
 
 
 @pytest.fixture
