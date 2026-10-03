@@ -1,5 +1,4 @@
-# ControlProof developer commands. Implemented: setup, dev, check, format, test.
-# Targets marked "not implemented" fail on purpose so they never look like a passed check.
+# ControlProof developer commands. Live checks make real, billable provider requests.
 
 UV ?= uv
 HOST ?= 127.0.0.1
@@ -16,7 +15,7 @@ help:
 	@echo "check      Ruff lint and format check"
 	@echo "format     apply Ruff formatting and safe fixes"
 	@echo "test       offline tests; network to TypeSafe and OpenAI is blocked"
-	@echo "test-live  paid Jev and Luna tests (not implemented yet, B5)"
+	@echo "test-live  paid Luna smoke test and 12-sample Jev evaluation (requires local API keys)"
 	@echo "verify     check + test + test-live"
 
 setup:
@@ -40,7 +39,9 @@ test:
 	$(UV) run pytest -m "not live"
 
 test-live:
-	@echo "test-live is not implemented yet (B5): no live verification was run." >&2; exit 1
+	$(UV) run $(WITH_ENV) python -m scripts.check_live_credentials
+	$(UV) run $(WITH_ENV) pytest -m live
+	$(UV) run $(WITH_ENV) python -m scripts.evaluate
 
 verify: check test test-live
 
