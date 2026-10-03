@@ -17,10 +17,16 @@ MAX_LOC_PART_CHARS = 64
 
 
 class ApiError(Exception):
-    def __init__(self, status_code: int, reason_code: ReasonCode) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        reason_code: ReasonCode,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(reason_code.value)
         self.status_code = status_code
         self.reason_code = reason_code
+        self.headers = headers
 
 
 def request_id_of(request: Request) -> UUID:
@@ -32,13 +38,16 @@ def error_response(
     status_code: int,
     reason_code: ReasonCode,
     errors: tuple[ErrorDetail, ...] = (),
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     body = ErrorResponse(request_id=request_id_of(request), reason_code=reason_code, errors=errors)
-    return JSONResponse(status_code=status_code, content=body.model_dump(mode="json"))
+    return JSONResponse(
+        status_code=status_code, content=body.model_dump(mode="json"), headers=headers
+    )
 
 
 async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
-    return error_response(request, exc.status_code, exc.reason_code)
+    return error_response(request, exc.status_code, exc.reason_code, headers=exc.headers)
 
 
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:

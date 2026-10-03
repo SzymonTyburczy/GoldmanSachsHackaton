@@ -3,6 +3,7 @@
 Run with ``make dev`` (``uvicorn --factory app.main:create_app``): one process, one worker.
 """
 
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,8 +15,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import db
+from app.adapters.documents import DocumentAdapter, DocumentCatalog
 from app.api import admin, health, v1
 from app.api.errors import ApiError, api_error_handler, validation_error_handler
+from app.auth import TokenDirectory
+from app.gateway import Gateway
 from app.settings import Settings
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -40,8 +44,25 @@ TELEMETRY_OFF = {
 }
 
 
+class _AccessLogWithoutQuery(logging.Filter):
+    """Uvicorn's access log records the full URL. A query string can carry a token sent
+    there by mistake or other client input, so only the path is kept."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            client, method, path, http_version, status = record.args
+            record.args = (client, method, str(path).split("?", 1)[0], http_version, status)
+        return True
+
+
+ACCESS_LOG_FILTER = _AccessLogWithoutQuery()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
+    access_log = logging.getLogger("uvicorn.access")
+    if ACCESS_LOG_FILTER not in access_log.filters:
+        access_log.addFilter(ACCESS_LOG_FILTER)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -51,6 +72,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="ControlProof", version="0.1.0", lifespan=lifespan, telemetry=TELEMETRY_OFF)
     app.state.settings = settings
+    # Weak or duplicated demo tokens and an invalid document catalog stop startup.
+    app.state.tokens = TokenDirectory.from_settings(settings)
+    catalog = DocumentCatalog.load(settings.documents_dir)
+    app.state.documents = DocumentAdapter(settings.documents_dir)
+    app.state.gateway = Gateway(settings, catalog, app.state.documents)
 
     @app.middleware("http")
     async def request_context(

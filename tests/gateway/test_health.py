@@ -64,8 +64,8 @@ def test_health_reports_unavailable_database(client: TestClient, tmp_path: Path)
 
 def test_health_never_exposes_secrets(db_path: Path) -> None:
     secrets = {
-        "token_analyst_a": "tok-analyst-sentinel",
-        "token_admin": "tok-admin-sentinel",
+        "token_analyst_a": "tok-analyst-sentinel-0123456789abcdef",
+        "token_admin": "tok-admin-sentinel-0123456789abcdef",
         "openai_api_key": "sk-openai-sentinel",
         "typesafe_api_key": "ts-typesafe-sentinel",
     }
