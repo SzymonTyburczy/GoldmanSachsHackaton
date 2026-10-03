@@ -14,8 +14,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import db
+from app import budget, db
 from app.adapters.documents import DocumentAdapter, DocumentCatalog
+from app.adapters.providers import Providers
 from app.api import admin, health, v1
 from app.api.errors import ApiError, api_error_handler, validation_error_handler
 from app.auth import TokenDirectory
@@ -63,7 +64,8 @@ class _AccessLogWithoutQuery(logging.Filter):
 ACCESS_LOG_FILTER = _AccessLogWithoutQuery()
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, providers: Providers | None = None) -> FastAPI:
+    """``providers`` replaces the Jev and Luna adapters built from the local keys (tests)."""
     settings = settings or Settings.from_env()
     access_log = logging.getLogger("uvicorn.access")
     if ACCESS_LOG_FILTER not in access_log.filters:
@@ -73,6 +75,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         # Fails startup on an unknown schema version instead of serving with it.
         db.init_db(settings.db_path)
+        # Reservations and requests left open by a stopped process may have reached a
+        # provider: they become UNKNOWN and keep their amounts (section 7).
+        stranded = budget.reconcile_after_restart(settings.db_path)
+        if stranded:
+            logger.warning("%d open reservations marked UNKNOWN after restart", stranded)
         # Load the spaCy pipelines now rather than on the first request. A failure is not
         # fatal: requests needing redaction are refused until the engine can be built.
         try:
@@ -87,7 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.tokens = TokenDirectory.from_settings(settings)
     catalog = DocumentCatalog.load(settings.documents_dir)
     app.state.documents = DocumentAdapter(settings.documents_dir)
-    app.state.gateway = Gateway(settings, catalog, app.state.documents)
+    app.state.gateway = Gateway(settings, catalog, app.state.documents, providers)
 
     @app.middleware("http")
     async def request_context(

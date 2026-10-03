@@ -161,22 +161,6 @@ def test_missing_token_never_reaches_the_adapter(
     assert adapter(client).read_count == 0
 
 
-def test_summary_is_not_built_and_reads_nothing(
-    client: TestClient, new_task: NewTask, execute: Execute
-) -> None:
-    response = execute(
-        "analyst-a",
-        new_task("analyst-a"),
-        "documents.summarize",
-        document_id="doc-a",
-        prompt="Summarize this company.",
-    )
-
-    assert response.status_code == 501
-    assert response.json()["reason_code"] == "NOT_IMPLEMENTED"
-    assert adapter(client).read_count == 0
-
-
 def test_artifacts_are_not_built(client: TestClient, new_task: NewTask, execute: Execute) -> None:
     response = execute("admin", new_task("admin"), "artifacts.admit", artifact_id="artifact-1")
 

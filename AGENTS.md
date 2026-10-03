@@ -1,4 +1,4 @@
-# ControlProof — instrukcje dla asystentów AI
+# ContrAl — instrukcje dla asystentów AI
 
 Odpowiadaj po polsku, konkretnie. Kod, nazwy API, UI i materiały konkursowe pisz po angielsku. Bieżące polecenia użytkownika mają pierwszeństwo przed planem.
 
@@ -9,11 +9,11 @@ Odpowiadaj po polsku, konkretnie. Kod, nazwy API, UI i materiały konkursowe pis
 3. [Plan dwóch osób](docs/PLAN_DWOCH_OSOB.md) — kolejność zadań i odbiór.
 4. [Wspólne ustalenia](docs/WSPOLNE_USTALENIA.md) — obowiązujące kontrakty i technologie.
 
-Na 3.10.2026 repo zawiera kroki A1–A4 oraz moduły B2–B4: kontrakty, schemat SQLite, `/health`, panel, tokeny demo, zadania, `documents.read` z kontrolą dostępu, wersjonowaną politykę z `config/`, redakcję przez lokalne Presidio i własną regułę sekretów, audyt z historią i eksportem, adaptery Jev/Luna, rezerwacje budżetu i ceny. Gateway nie wywołuje jeszcze Jev, Luny ani budżetu (A5). Feed, artefakty i wyniki testów live jeszcze nie działają; ich endpointy odpowiadają `501`. Sprawdź aktualny stan przed kodowaniem. Planowane komendy i struktura katalogów nie są dowodem ich istnienia.
+Na 3.10.2026 repo zawiera kroki A1–A4 oraz moduły B2–B4: kontrakty, schemat SQLite, `/health`, panel, tokeny demo, zadania, `documents.read` z kontrolą dostępu, wersjonowaną politykę z `config/`, redakcję przez lokalne Presidio i własną regułę sekretów, audyt z historią i eksportem, adaptery Jev/Luna, rezerwacje budżetu i ceny. Od A5 gateway wywołuje Jev (także przy `documents.read`) i Lunę przez rezerwacje budżetu, z idempotencją i limitami żądań. Feed, artefakty i wyniki testów live jeszcze nie działają; ich endpointy odpowiadają `501`. Sprawdź aktualny stan przed kodowaniem. Planowane komendy i struktura katalogów nie są dowodem ich istnienia.
 
 ## Decyzje zespołu
 
-Dwie osoby, jeden projekt AI Control Layer dla Goldman Sachs. Osoba 1: gateway, dane, konfiguracja, audyt, panel i integracja. Osoba 2: OpenAI/Jev, semantyka, budżet i wspólny zestaw testów. Stos: Python 3.12, FastAPI, Pydantic 2, SQLite, prosty HTML/JS, uv, pytest i Ruff. Generowanie: OpenAI `gpt-6-luna` przez Responses API. Ocena semantyczna: TypeSafe Jev `jev-1.13.0`. PII: lokalne Presidio Analyzer/Anonymizer i spaCy. Reguły gatewaya egzekwują wynik; Jev nie nadaje praw.
+Dwie osoby, jeden projekt AI Control Layer dla Goldman Sachs. Maciek: gateway, dane, konfiguracja, audyt, panel i integracja. Paweł: OpenAI/Jev, semantyka, budżet i wspólny zestaw testów. Stos: Python 3.12, FastAPI, Pydantic 2, SQLite, prosty HTML/JS, uv, pytest i Ruff. Generowanie: OpenAI `gpt-6-luna` przez Responses API. Ocena semantyczna: TypeSafe Jev `jev-1.13.0`. PII: lokalne Presidio Analyzer/Anonymizer i spaCy. Reguły gatewaya egzekwują wynik; Jev nie nadaje praw.
 
 Nie przywracaj czteroosobowego podziału, planu kilku projektów ani lokalnego detektora jako domyślnej decyzji. Archiwum jest historyczne. Rozbieżność wyboru zewnętrznych API z oczekiwaniem modeli lokalnych w briefie pozostaje jawna we wspólnych ustaleniach.
 

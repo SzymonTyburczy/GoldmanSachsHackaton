@@ -130,8 +130,8 @@ def test_admin_events_filter_by_task_and_request(
         "/admin/events", params={"request_id": first["request_id"]}, headers=headers["admin"]
     ).json()["events"]
 
-    assert len(everything) == 7  # 3 + 3 + 1
-    assert [e["principal_id"] for e in by_task] == ["reviewer-a"] * 3 + ["analyst-a"]
+    assert len(everything) == 11  # 5 + 5 + 1
+    assert [e["principal_id"] for e in by_task] == ["reviewer-a"] * 5 + ["analyst-a"]
     assert [e["event_id"] for e in by_request] == first["audit_event_ids"]
 
 
@@ -159,7 +159,7 @@ def test_export_is_jsonl_from_the_same_store(
     assert response.text.endswith("\n")
     exported = [AuditEvent.model_validate_json(line).model_dump(mode="json") for line in lines]
     assert exported == all_pages(client, "/admin/events", headers["admin"], limit=200)
-    assert len(exported) == 7  # 3 + 2 + 2
+    assert len(exported) == 9  # 5 + 2 + 2
 
 
 @pytest.mark.parametrize("identity", ["analyst-a", "reviewer-a"])
@@ -203,14 +203,25 @@ def test_audit_and_logs_hold_no_tokens_or_document_values(
         exported = client.get("/admin/audit/export", headers=headers["admin"]).text
 
     with closing(sqlite3.connect(db_path)) as conn:
+        stored = "\n".join(row[0] for row in conn.execute("SELECT event_json FROM audit_events"))
         database = "\n".join(conn.iterdump())
-    assert "audit_events" in database
-    forbidden = list(TOKENS.values()) + ["PROMPT-SENTINEL-41c9"]
+    secrets = list(TOKENS.values()) + ["PROMPT-SENTINEL-41c9"]
+    forbidden = list(secrets)
     for document_id in ("doc-a", "doc-b"):
         path = DEFAULT_DOCUMENTS_DIR / "content" / f"{document_id}.json"
         fields = json.loads(path.read_text(encoding="utf-8"))["fields"]
         # "status" holds a short word such as "active", which also names a table.
         forbidden += [value for name, value in fields.items() if name != "status"]
-    for text in (exported, database, caplog.text):
+        secrets += [
+            value for name, value in fields.items() if name not in ("status", "company_name")
+        ]
+    secrets += ["+48 22 555 01 23", "PL61 1090 1014 0000 0712 1981 2874"]
+    assert stored
+    for text in (exported, stored, caplog.text):
         for value in forbidden:
             assert value not in text
+    # The rest of the database keeps responses for idempotent retries. They are the
+    # redacted outputs the caller already received, so no unmasked value is there either.
+    assert "response_body" in database
+    for value in secrets:
+        assert value not in database

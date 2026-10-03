@@ -1,28 +1,28 @@
 # Plan pracy dwóch osób
 
-**Cel:** działający ControlProof z kontrolą dostępu, redakcją przez Presidio, detektorem Jev, modelem generującym OpenAI Luna, limitami, zmienną polityką/feedem, audytem, panelem i testami. To lista pracy do wykonania, nie raport z gotowego produktu.
+**Cel:** działający ContrAl z kontrolą dostępu, redakcją przez Presidio, detektorem Jev, modelem generującym OpenAI Luna, limitami, zmienną polityką/feedem, audytem, panelem i testami. To lista pracy do wykonania, nie raport z gotowego produktu.
 
-**Osoba 1:** gateway, dane, konfiguracja, audyt, panel i integracja. **Osoba 2:** OpenAI/Jev, semantyka, budżet, pomiary i scalanie testów. Zasady edycji plików: [CONTRIBUTING](../CONTRIBUTING.md). Wszystkie wspólne formaty: [ustalenia techniczne](WSPOLNE_USTALENIA.md).
+**Maciek:** gateway, dane, konfiguracja, audyt, panel i integracja. **Paweł:** OpenAI/Jev, semantyka, budżet, pomiary i scalanie testów. Zasady edycji plików: [CONTRIBUTING](../CONTRIBUTING.md). Wszystkie wspólne formaty: [ustalenia techniczne](WSPOLNE_USTALENIA.md).
 
 ## 0. Pierwsze 30 minut — razem
 
-1. Przeczytajcie ten plan i sekcje 1–5 wspólnych ustaleń. Wpiszcie w zadaniach swoje imiona pod osobą 1 i 2.
+1. Przeczytajcie ten plan i sekcje 1–5 wspólnych ustaleń. Przypiszcie zadania zgodnie z podziałem: Maciek — kroki A, Paweł — kroki B.
 2. Wyjaśnijcie sobie przepływ: użytkownik → gateway → kontrola → wykonawca → audyt. Gateway to nasz serwer decydujący, czy wolno wywołać narzędzie/model. Adapter to kod faktycznie wykonujący tę czynność.
 3. Przejdźcie papierowo dwa przypadki: analityk czyta dokument A; ten sam analityk próbuje dokumentu B. Ustalcie, w którym miejscu drugi przypadek musi się zatrzymać.
-4. Ustalcie repo/gałąź integracyjną. Każdy używa własnego klonu lub worktree. Osoba 1 tworzy szkielet i wspólne kontrakty, osoba 2 w tym czasie przygotowuje dostęp do API.
-5. Osoba 1 ustala z organizatorem terminy i zapisuje odpowiedź w sekcji 11 wspólnych ustaleń. Osoba 2 sprawdza dostęp do Jev i Luny oraz konfigurację obu kont; klucze pozostają lokalnie.
+4. Ustalcie repo/gałąź integracyjną. Każdy używa własnego klonu lub worktree. Maciek tworzy szkielet i wspólne kontrakty, Paweł w tym czasie przygotowuje dostęp do API.
+5. Maciek ustala z organizatorem terminy i zapisuje odpowiedź w sekcji 11 wspólnych ustaleń. Paweł sprawdza dostęp do Jev i Luny oraz konfigurację obu kont; klucze pozostają lokalnie.
 
 **Wynik:** wiecie, co budujecie, kto dotyka których plików i jakie są warunki odbioru. Szczegóły kontraktów z sekcji 4–5 są uzgodnione przed pierwszą integracją.
 
-## 1. Osoba 1 — wykonuj w tej kolejności
+## 1. Maciek — wykonuj w tej kolejności
 
 ### A1. Szkielet i wspólne formaty
 
 **Zrozum:** żądanie HTTP, odpowiedź JSON, walidację Pydantic i różnicę między danymi od użytkownika a danymi ustalonymi przez serwer.
 
-**Zrób:** utwórz projekt uv z Pythonem 3.12, zależnościami, lockfile i `.gitignore`. Dodaj `app/contracts.py`, schemat SQLite, `GET /health`, szkielety API i statyczny panel. Przygotuj `.env.example` bez sekretów. Z osobą 2 zamknij format `RequestContext`, `ControlResult`, `PiiFinding`, `SemanticResult`, `Usage`, `Reservation`, `AuditEvent`.
+**Zrób:** utwórz projekt uv z Pythonem 3.12, zależnościami, lockfile i `.gitignore`. Dodaj `app/contracts.py`, schemat SQLite, `GET /health`, szkielety API i statyczny panel. Przygotuj `.env.example` bez sekretów. Z Pawłem zamknij format `RequestContext`, `ControlResult`, `PiiFinding`, `SemanticResult`, `Usage`, `Reservation`, `AuditEvent`.
 
-**Gotowe, gdy:** osoba 2 uruchamia szkielet, otwiera `/health` i importuje te same kontrakty. Przekaż jej commit; od tego momentu możecie niezależnie pisać moduły.
+**Gotowe, gdy:** Paweł uruchamia szkielet, otwiera `/health` i importuje te same kontrakty. Przekaż mu commit; od tego momentu możecie niezależnie pisać moduły.
 
 ### A2. Tożsamość, zadania i dokumenty
 
@@ -38,7 +38,7 @@
 
 **Zrób:** zapis zdarzeń do SQLite, identyfikatory operacji, etap kontroli, wersję polityki i liczniki adapterów. Rozdziel wywołania dokumentu, detektora i modelu podsumowującego. Dodaj odczyt historii dla właściciela zadania oraz eksport dla admina.
 
-**Gotowe, gdy:** osoba 2 na podstawie audytu potrafi wskazać, co zostało wywołane i gdzie nastąpiła odmowa. Logi nie zawierają tokenów dostępowych ani surowych treści.
+**Gotowe, gdy:** Paweł na podstawie audytu potrafi wskazać, co zostało wywołane i gdzie nastąpiła odmowa. Logi nie zawierają tokenów dostępowych ani surowych treści.
 
 ### A4. Polityka i redakcja danych
 
@@ -48,7 +48,7 @@
 
 **Gotowe, gdy:** analityk i reviewer widzą odpowiedni zakres A, żaden nie widzi B, a syntetyczny sekret nie występuje w danych przekazywanych do detektora, modelu, panelu ani eksportu. Testy sprawdzają wejścia adapterów.
 
-### A5. Połączenie z modułami osoby 2
+### A5. Połączenie z modułami Pawła
 
 **Zrozum:** detektor także zużywa zasoby. Każda płatna próba potrzebuje rezerwacji przed wywołaniem; twardy zakaz dostępu kończy ścieżkę wcześniej.
 
@@ -68,11 +68,11 @@
 
 **Zrozum:** slajdy muszą wyjaśniać działający mechanizm i pokazywać zmierzone wyniki.
 
-**Zrób:** diagram, krótki przykład integracji klienta, opis, PDF do 10 slajdów i zgłoszenie. Wstaw wyniki od osoby 2 wraz z liczebnością, modelem i ograniczeniami. Usuń z materiałów deklaracje funkcji, których nie ukończyliście.
+**Zrób:** diagram, krótki przykład integracji klienta, opis, PDF do 10 slajdów i zgłoszenie. Wstaw wyniki od Pawła wraz z liczebnością, modelem i ograniczeniami. Usuń z materiałów deklaracje funkcji, których nie ukończyliście.
 
-**Gotowe, gdy:** osoba 2 przechodzi demo z instrukcji; pakiet zapisany w formularzu ma działające linki, właściwy skład i załączniki.
+**Gotowe, gdy:** Paweł przechodzi demo z instrukcji; pakiet zapisany w formularzu ma działające linki, właściwy skład i załączniki.
 
-## 2. Osoba 2 — wykonuj w tej kolejności
+## 2. Paweł — wykonuj w tej kolejności
 
 ### B1. Jev, OpenAI Luna i próba integracji
 
@@ -88,7 +88,7 @@
 
 **Zrób:** `jev.py` przez HTTPX bez niejawnych retry oraz `openai_luna.py` przez SDK. Dla Jev zdefiniuj dwa pytania Noul: próba zmiany instrukcji i wyprowadzenia danych. Adapter normalizuje wyniki do `SemanticResult` z sekcji 4; detektor nie ma narzędzi. Próg pochodzi z polityki. Timeout, odmowa modelu, brak wyniku i niezgodny format kończą kontrolę błędem, który blokuje dalszą płatną operację. Przygotuj testowy provider dla testów offline.
 
-**Gotowe, gdy:** wynik detektora dla nowego tekstu pochodzi z prawdziwego modelu, a testy granicy progu i błędów są przewidywalne dzięki jawnemu stubowi. Przekaż osobie 1 interfejs i przykłady.
+**Gotowe, gdy:** wynik detektora dla nowego tekstu pochodzi z prawdziwego modelu, a testy granicy progu i błędów są przewidywalne dzięki jawnemu stubowi. Przekaż Maćkowi interfejs i przykłady.
 
 ### B3. Atomowy budżet
 
@@ -102,7 +102,7 @@
 
 **Zrozum:** maksymalny koszt rezerwuje się przed wywołaniem. Jev i Luna mają osobne taryfy i sposób określania górnej granicy; wspólne saldo obejmuje oba. Koszt Luny uwzględnia niewidoczne tokeny wyjścia.
 
-**Zrób:** zweryfikowane tabele cen obu dostawców w polityce. Dla Jev rezerwuj konserwatywną granicę z sekcji 7; dla Luny licz pełne wejście i ogranicz wyjście. Podłącz B3 do wszystkich dróg wywołania adaptera, także liczenia tokenów w zakresie limitów zasobów. Rozlicz `usage`, błędy i niepewny koszt. Wspólnie z osobą 1 sprawdź całość przez API.
+**Zrób:** zweryfikowane tabele cen obu dostawców w polityce. Dla Jev rezerwuj konserwatywną granicę z sekcji 7; dla Luny licz pełne wejście i ogranicz wyjście. Podłącz B3 do wszystkich dróg wywołania adaptera, także liczenia tokenów w zakresie limitów zasobów. Rozlicz `usage`, błędy i niepewny koszt. Wspólnie z Maćkiem sprawdź całość przez API.
 
 **Gotowe, gdy:** mały realny scenariusz pokazuje rezerwację i rozliczenie, a wyczerpany budżet zatrzymuje kolejną generację. Nie ma niejawnych ponowień SDK ani płatnej drogi omijającej limiter.
 
@@ -110,7 +110,7 @@
 
 **Zrozum:** test mechanizmu sprawdza kod na kontrolowanym wyniku modelu. Ewaluacja sprawdza, czy prawdziwy model poprawnie ocenia tekst. Te wyniki trzeba pokazać oddzielnie.
 
-**Zrób:** scal testy osoby 1 i własne w `make test`; dodaj `make test-live` i `make verify`. Przygotuj co najmniej 12 próbek sprawdzających: 6 legalnych i 6 manipulacji, PL/EN, parafrazy oraz cytat o ataku. Przykłady do dobierania progu trzymaj oddzielnie. Dodaj niezależne testy braku PII, obejścia dostępu, feedu, zmian polityki, limitów i audytu.
+**Zrób:** scal testy Maćka i własne w `make test`; dodaj `make test-live` i `make verify`. Przygotuj co najmniej 12 próbek sprawdzających: 6 legalnych i 6 manipulacji, PL/EN, parafrazy oraz cytat o ataku. Przykłady do dobierania progu trzymaj oddzielnie. Dodaj niezależne testy braku PII, obejścia dostępu, feedu, zmian polityki, limitów i audytu.
 
 **Gotowe, gdy:** każda obiecana kontrola ma dowód działania. Raport pokazuje fałszywe blokady i przeoczenia. Niedostępny model nie daje zielonego wyniku pełnej weryfikacji.
 
@@ -120,13 +120,13 @@
 
 **Zrób:** pomiar na tych samych danych dla profilu laboratoryjnego, kontroli regułowych i pełnej hybrydy. Zapisz p50/p95, liczbę prób, błędy, koszt i wersję kodu. Zacznij od 100 prób offline i 12 live, jeśli mieszczą się w ustawionym budżecie. Uruchom projekt na drugim laptopie wyłącznie według README.
 
-**Gotowe, gdy:** osoba 1 ma liczby do slajdów, wszystkie timeouty są ujęte w raporcie, a start nie wymaga nieopisanych poprawek. Przygotuj reset danych demo i zapasowe nagranie z opisem wersji.
+**Gotowe, gdy:** Maciek ma liczby do slajdów, wszystkie timeouty są ujęte w raporcie, a start nie wymaga nieopisanych poprawek. Przygotuj reset danych demo i zapasowe nagranie z opisem wersji.
 
 ## 3. Punkty wspólnej integracji
 
 Godziny są orientacyjne i liczone od faktycznego, dozwolonego startu pracy. Ostatnie trzy godziny przed potwierdzonym terminem pozostają na oddanie.
 
-| Kiedy | Osoba 1 | Osoba 2 | Razem sprawdzacie |
+| Kiedy | Maciek | Paweł | Razem sprawdzacie |
 |---|---|---|---|
 | H0–H1 | A1 | B1 | Wspólne środowisko i realny model |
 | H1–H3 | A2–A3 | B2, początek B3 | Odczyt A, blokada B i audyt |

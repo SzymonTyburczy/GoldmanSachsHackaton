@@ -77,13 +77,16 @@ def get_task_events(
 
 
 @router.post("/execute")
-def execute(
+async def execute(
     body: ExecuteRequest,
     principal: CurrentPrincipal,
     request: Request,
-    # Required by the contract; stored with the result once idempotency is built.
     idempotency_key: Annotated[UUID, Header(alias="Idempotency-Key")],
 ) -> ExecuteResponse:
-    """Run one tool call through the gateway; a denial is a 200 with ``DENY``."""
+    """Run one tool call through the gateway; a denial is a 200 with ``DENY``.
+
+    A repeated ``Idempotency-Key`` with the same body returns the stored response, whose
+    ``request_id`` is that of the first request.
+    """
     gateway: Gateway = request.app.state.gateway
-    return gateway.execute(request_id_of(request), principal, body)
+    return await gateway.execute(request_id_of(request), principal, body, idempotency_key)

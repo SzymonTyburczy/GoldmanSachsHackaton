@@ -109,16 +109,17 @@ DetectorTimeout = Annotated[int, Field(strict=True, ge=1, le=60)]
 
 
 class ControlsPolicy(StrictModel):
-    """Access, redaction and budget are hard controls and cannot be switched off.
+    """Access, redaction, budget and the semantic detector cannot be switched off.
 
-    ``semantic`` and ``artifacts`` are enforced from A5 and A6; until then their paths
-    answer 501 regardless of this setting.
+    Without the detector no document leaves the gateway, so switching it off would only
+    look like a setting. ``artifacts`` is enforced from A6; until then its path answers
+    501 regardless of this setting.
     """
 
     access: HardControl
     redaction: HardControl
     budget: HardControl
-    semantic: StrictBool
+    semantic: HardControl
     artifacts: StrictBool
 
 
@@ -209,7 +210,10 @@ class RedactionPolicy(StrictModel):
 
 
 class PricingPolicy(StrictModel):
-    """Verified provider rates in integer nUSD per token; see ``app.pricing``."""
+    """Verified provider rates in integer nUSD per token; see ``app.pricing``.
+
+    The rates that size each reservation are positive: a zero amount cannot be reserved.
+    """
 
     version: Token
     verified_on: date
@@ -217,11 +221,11 @@ class PricingPolicy(StrictModel):
     source_urls: Annotated[tuple[HttpsUrl, ...], Field(min_length=1)]
     typesafe_model: Token
     openai_model: Token
-    typesafe_input_nusd_per_token: NonNegativeInt
+    typesafe_input_nusd_per_token: PositiveInt
     openai_input_nusd_per_token: NonNegativeInt
     openai_cached_input_nusd_per_token: NonNegativeInt
     openai_cache_write_nusd_per_token: NonNegativeInt
-    openai_output_nusd_per_token: NonNegativeInt
+    openai_output_nusd_per_token: PositiveInt
     openai_long_context_threshold: PositiveInt
     openai_long_input_nusd_per_token: NonNegativeInt
     openai_long_cached_input_nusd_per_token: NonNegativeInt
