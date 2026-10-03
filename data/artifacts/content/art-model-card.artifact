@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "artifact_id": "art-model-card",
+  "kind": "model_card",
+  "title": "Synthetic model card",
+  "body": "Fictional model card for the demo. Intended use: internal summaries of synthetic records only."
+}

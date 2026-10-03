@@ -1,0 +1,2 @@
+# Artifact bytes are checked against SHA-256 digests in the manifest; never convert them.
+data/artifacts/content/*.artifact binary
