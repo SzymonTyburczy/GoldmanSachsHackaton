@@ -3,6 +3,7 @@
 UV ?= uv
 HOST ?= 127.0.0.1
 PORT ?= 8000
+ITERATIONS ?= 100
 # Load .env for app commands only when it exists. Tests never load it.
 WITH_ENV = $$(test -f .env && echo --env-file=.env)
 
@@ -17,6 +18,7 @@ help:
 	@echo "test       offline tests; network to TypeSafe and OpenAI is blocked"
 	@echo "test-live  paid Luna smoke test and 12-sample Jev evaluation (requires local API keys)"
 	@echo "verify     check + test + test-live"
+	@echo "benchmark  100 offline component measurements; use LIVE=1 for the budgeted 12-case provider run"
 
 setup:
 	$(UV) sync --locked
@@ -45,5 +47,13 @@ test-live:
 
 verify: check test test-live
 
-benchmark reload-config reset-demo:
+benchmark:
+	@if [ "$(LIVE)" = "1" ]; then \
+		$(UV) run $(WITH_ENV) python -m scripts.check_live_credentials && \
+		$(UV) run $(WITH_ENV) python -m scripts.benchmark --live --iterations $(ITERATIONS); \
+	else \
+		$(UV) run $(WITH_ENV) python -m scripts.benchmark --iterations $(ITERATIONS); \
+	fi
+
+reload-config reset-demo:
 	@echo "$@ is not implemented yet." >&2; exit 1
