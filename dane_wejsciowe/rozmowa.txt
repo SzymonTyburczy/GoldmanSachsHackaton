@@ -1,0 +1,428 @@
+[Speaker 0]
+Cześć. 
+
+[Speaker 0]
+Cześć, Maciek. 
+
+[Speaker 0]
+Miło nam. [szuranie] 
+
+[Speaker 1]
+Hej. 
+
+[Speaker 0]
+Maciek, Maciek. [śmiech] Pięknie. Słuchaj, bo generalnie gdzieś chcemy-- 
+
+[Speaker 0]
+chcielibyśmy gdzieś zrozumieć, yy, co wy dokładnie potrzebujecie, jak to powinno w ogóle wyglądać- 
+
+[Speaker 1]
+Dobra. 
+
+[Speaker 0]
+...z perspektywy użytkownika, 
+
+[Speaker 0]
+yy, bo gdzieś mamy swoje przemyślenia, ale chcielibyśmy usłyszeć to, że tak powiem, od ciebie najlepiej bezpośrednio. 
+
+[Speaker 1]
+Jasne, tylko, tylko użytkownikiem to wiadomo, że będzie jakby IT, tak? 
+
+[Speaker 0]
+Tak. 
+
+[Speaker 1]
+To znaczy, [odchrząknięcie] yy, jakby u-- p-prosty przykład to jest jak budujecie, yy, 
+
+[Speaker 1]
+agenta. 
+
+[Speaker 0]
+Mhm. 
+
+[Speaker 1]
+Agent korzysta z LLM-a. 
+
+[Speaker 0]
+Tak. 
+
+[Speaker 1]
+Macie tu jakiś MCP serwer- 
+
+[Speaker 0]
+Mhm. 
+
+[Speaker 1]
+...jakąś bazę danych- 
+
+[Speaker 0]
+Tak. 
+
+[Speaker 1]
+...jakiś API. [odchrząknięcie] To agent sobie korzysta z LLM-a, jednocześnie ma dostęp do tych, yy, systemów. 
+
+[Speaker 0]
+Tak. 
+
+[Speaker 1]
+[odchrząknięcie] I to, co my byśmy chcieli, to żebyście potrafili zabezpieczyć taki ekosystem. I już wam powiem, co to znaczy. To znaczy, że, yy, to jest jeden z patternów architektonicznych. Zrobicie-- yy, od razu już przejdę do takiej terminologii. Załóżmy takiego AI firewalla, tak? My to właśnie nazywamy control layer, [odchrząknięcie] który pozwoli wam, że... 
+
+[Speaker 1]
+jak ten [odchrząknięcie] już końcowy użytkownik, tak, sobie przyjdzie za-- yy, żeby skorzystać z tego agenta, 
+
+[Speaker 1]
+to załóżmy, [odchrząknięcie] będzie tutaj autentykacja, tak? Czyli agent, ee, i dany użytkownik będziemy jakby weryfikować jako autenty-- yy, jako identity. 
+
+[Speaker 0]
+Jako, jako, yy, pracownika, powiedzmy, że jako uprawnienia i tak dalej do jakichś dostępów do różnych rzeczy też, tak? 
+
+[Speaker 1]
+Tak, [odchrząknięcie] tak. Czyli właśnie też access control. Już nie tylko authentication, ale też access control. Ee... 
+
+[Speaker 1]
+Kole-- czyli macie już authentication, macie access control. Będziecie robić, załóżmy, input validation, czyli będziecie sprawdzać, czy w tym prompcie, czy co tam idzie, yy, jest de facto input, na który pozwalacie. 
+
+[Speaker 1]
+Później [odchrząknięcie] wyobraźcie sobie, że ta baza danych ma dane personalne. To powiedzmy agent jeden może dostawać wszystkie dane, a agent dwa może, powiedzmy, mieć, yy, dane, ale nie dane wrażliwe. 
+
+[Speaker 0]
+Agent, agent- 
+
+[Speaker 1]
+Czyli output filtering robicie. 
+
+[Speaker 0]
+Czyli tylko na przykład, yy, agent osoby jakiejś innej, która ma mniejszy zakres, yy, uprawnień, powiedzmy. 
+
+[Speaker 1]
+Tak, tylko że już jakby [odchrząknięcie] nie robicie tego na poziomie, yy, access control, tylko właśnie filtrowania danych. Yy, kolejną rzeczą jest-- yy, widzę duże zainteresowanie naszym paskiem. Bardzo się cieszę. 
+
+[Speaker 1]
+Yy, kolejną rzeczą jest na przykład, yy, to, żeby agent wam nie zabił jakichś resources, więc będziecie sprawdzać, czy on nie calluje, nie wiem, tysiąc razy na sekundę. 
+
+[Speaker 0]
+Tak. 
+
+[Speaker 1]
+Czyli jakby- 
+
+[Speaker 0]
+Ograniczenie przed zapętlaniem, jakieś prompt injection. Rozumiem, że jakby- 
+
+[Speaker 1]
+Tak. 
+
+[Speaker 0]
+...tak-- też, też, też jak najbardziej, tak? 
+
+[Speaker 1]
+Do-do-dokładnie. I zobacz i tak powiem już, yy, tak, yy, też jeden team zadał taki fajny, yy... Macie teraz-- yy, nie wiem, czy widzieliście ten Jeff. 
+
+[Speaker 0]
+Oczywiście. 
+
+[Speaker 1]
+Okej. No, no to zobacz, jakbyś-- wyobraź sobie, to jest teoretyczne, bo ja nie znam tego modelu, to żebyście od razu wiedzieli, ale jak macie agenta i załóżmy agent robi tego calla, żeby gdzieś tam się dostać. Nie wiem. Jeff bierze i sprawdza, czy to jest atak. Tak? Załóżmy. Ma-- jest jakoś tam skonfigurowany. 
+
+[Speaker 0]
+Mieliśmy w ogóle ten sam pomysł, żeby użyć Jeffa, tak że, tak że właśnie- 
+
+[Speaker 1]
+Dokładnie. I załóżmy on, yy, wyskakuje, że to jest dziewięćdziesiąt proc-- na dziewięćdziesiąt procent jest atak. 
+
+[Speaker 0]
+Mhm. 
+
+[Speaker 1]
+A tutaj w tym layer macie politykę, która mówi, że jeśli jest powyżej osiemdziesięciu, to już blokujemy. Sorry, czekaj, gdzie był tak? [odchrząknięcie] Jeśli jest powyżej osiemdziesięciu procent, [odchrząknięcie] to blokujemy- 
+
+[Speaker 0]
+Mhm. 
+
+[Speaker 1]
+...[odchrząknięcie] ale-- a później zmienicie, jeśli jest powyżej dziewięćdziesięciu jeden procent, to blokujemy. Więc będziecie w stanie na przykład pokazać, że, ee, polityka albo przepuszcza, albo nie przepuszcza. 
+
+[Speaker 0]
+Mhm. 
+
+[Speaker 1]
+Tak naprawdę ten layer 
+
+[Speaker 1]
+musi, yy, spełniać taki wymóg, yy, jak to powiedzieć, implementacji kontroli, które standardowo są w dużych organizacjach. Nie wiem, czy macie doświadczenie w pracy w dużych firmach, czy nie. 
+
+[Speaker 0]
+Ja, ja przez chwilę w eBanku, tak. 
+
+[Speaker 1]
+Okej, no to, to naświetlę wam tylko-- skasuję to, dobra? 
+
+[Speaker 0]
+Jasne. 
+
+[Speaker 1]
+Yy, w dużych firmach, jak w ogóle ktoś implementuje aplikację jakąkolwiek, [odchrząknięcie] to jest coś takiego jak-- bardzo często jest coś takiego jak, yy, control catalog. 
+
+[Speaker 1]
+To jest katalog kontroli. To są różne tam frameworki do tego i tak dalej. [odchrząknięcie] I to oznacza, że jak przychodzi deweloper i on wypuszcza jakąś aplikację, to się patrzy, czy ta aplikacja jest internet facing, czy nie internet facing, czy mają dostęp klienci, czy nie mają. I się określa: a, okej, trzeba zrobić authentication, trzeba zrobić access control, [odchrząknięcie] musimy robić input validation, tak? [odchrząknięcie] Po prostu określa się- 
+
+[Speaker 0]
+Wymagania- 
+
+[Speaker 1]
+...nie wiem, dwadzieścia- 
+
+[Speaker 0]
+...takie wymagania bezpieczeństwa po prostu. 
+
+[Speaker 1]
+Do-dokładnie, to są wymagania bezpieczeństwa i taki-- nie wiem, ile my mamy, ale tak liczcie, że taki control catalog to jest często , tak? [odchrząknięcie] I one są definiowane właśnie na zasadzie: aplikacja musi autentykować użytkowników. Hasła muszą być silne, tak? Yy, kojarzycie? Takich-- ileś tam rzeczy. No więc fajnie by było, że wiecie, jak macie-- wiecie, że coś takiego istnieje, no to później jak już robicie sobie ten layer taki, że agent, 
+
+[Speaker 1]
+prawda, ma dostęp do tych resoursów, [odchrząknięcie] no to po prostu wasz layer to de facto to jest tak zwany enforcement niektórych z tych kontroli. I właśnie wybierzcie sobie tam, yy, ten authentication, access control, powiedzmy input validation, input, ten output filtering, yy, i zobaczcie, które z nich fajnie by było zaimplementować, żeby pokazać, żeby pokazać właśnie najpierw ten taki negative case.
+
+[Speaker 2]
+Wiesz co, mam taki pomysł. Jest dużo, yy, osób czekających. Może zróbmy-- podzielmy to na dwie części. Jedni na pewno mają pytania ogólne, o czym w ogóle jest to zadanie, a drudzy już konkretne. Więc zróbmy dwie grupy. Yy, ja najpierw bym opowiedział o tych ogólnych rzeczach, żeby tu trochę rozładować kolejkę, a potem byśmy się zajęli... 
+
+[Speaker 1]
+Dobra. 
+
+[Speaker 2]
+Ty już masz-- ale tak tylko mówię, czyli... 
+
+[Speaker 1]
+Dobra. Nie, nie, nie. Myślę, że to świetny pomysł, Tomek. 
+
+[Speaker 1]
+Yy, [odchrząknięcie] jakby, 
+
+[Speaker 1]
+yy... Aha. Wiecie co? I [odchrząknięcie] żeby zobaczyć, powiedzmy, które z tych kontroli są tak naprawdę aplikowalne, no to, yy, są różne, yy, źródła. Na przykład jest ten Open Web Application Security Project i on zrobił chyba coś takiego jak top dziesięć dla Agentic Systems. 
+
+[Speaker 1]
+Więc to jest taki-- yy, gdzie, gdzie możecie sobie wziąć, popatrzeć: „A, okej, dobra, ja tak naprawdę chciałbym zaimplementować głównie autentykację, głównie access control, input i output filter”. To są takie cztery, które wam mogę powiedzieć na pewno. I powiedzmy to, żeby wam agent nie zabił resource'ów, no to ten resource management to jest takie piąte. 
+
+[Speaker 0]
+Czy dopuszczamy możliwość, yy, [stukanie] w tym procesie gdzieś-- czy jest gdzieś miejsce dla człowieka? To znaczy, czy agent może zdecydować: „Nie wiem. [odchrząknięcie] Decyzję przekierowuję do człowieka”? 
+
+[Speaker 1]
+Świetne pytanie. [odchrząknięcie] Pierwsze, które ktoś zadał, więc, yy, 
+
+[Speaker 1]
+nie będę go już tam mówić, bo to, yy, może wasz będzie konik. Zobaczcie, jak przychodzi, yy, request [odchrząknięcie] i powiedzmy ten wasz gateway... Sorry, że już tak was gryzę, ale naprawdę muszę iść dalej. Yy, chodzi o to, że jeśli wasz gateway, nie wiem, coś wykryje, tak? Albo załóżmy agent, yy, powinien mieć dostęp do tego resource. Może będzie, mm, yy, polityka taka, że u-umożliwiamy wysłanie, nie wiem, maila i dostaje to ktoś [odchrząknięcie] i stwierdza: „A, okej, jednak się pochylę, odpowiem, że ma możliwość dostępu i ktoś będzie miał dostęp”. To też jest fajna opcja. 
+
+[Speaker 1]
+Oczywiście to, wiecie, to ma takie praktyczne implikacje na zasadzie czy, 
+
+[Speaker 1]
+yy... jak jest taki short running task, no to ktoś oczekuje odpowiedzi w ciągu, nie wiem, tam dziesięciu sekund, tak? Ale jak jest jakiś long running task, no to może rzeczywiście to ma sens. Więc to też jest fajne, że tutaj użytkownik na-- załóżmy za pomocą maila, yy, jakby odpowiada, mówi okej, to wraca do tego gatewaya i on- 
+
+[Speaker 0]
+Mhm. A możesz przydać-- yy, przy-- podać przykład jakichś konkretnych takich, yy, use case'ów? 
+
+[Speaker 1]
+Ee. [odchrząknięcie] 
+
+[Speaker 0]
+Jakąś historię taką klasyczną, powiedzmy. 
+
+[Speaker 1]
+Wiesz co, musiałbym pomyśleć. Powiem ci, że na pewno top of my head nie. 
+
+[Speaker 0]
+Okej, dobra. 
+
+[Speaker 1]
+Ale, ale ten taki aspekt-- naprawdę świetny, świetny pomysł z tym takim tak zwanym dynamic access control, że jakby chcesz, żeby agent, yy, miał możliwość, yy, jakby zaaplikowania o access. Nie ma on teraz tego, ale, yy, wysyła takie zapytanie: „Ja potrzebuję, yy, do odpowiedzi dane z tego systemu. Daj mi do niego dostęp”. 
+
+[Speaker 3]
+A ja mam takie pytanie. Nie-nie wiem, czy-- powinienem się dobrze sformułować, ale czy-- 
+
+[Speaker 3]
+jak twoim zdaniem najlepiej byłoby udowodnić to, że to, co my robimy, faktycznie, faktycznie działa? Tak mniej więcej. 
+
+[Speaker 1]
+Okej, to bardzo prosto to wam powiem. Zróbcie negatywne i pozytywne test case'y, czyli jakby [odchrząknięcie], yy, pokażecie, nie wiem, wymyślicie tam, yy, dziesięć różnych interakcji między agentem a, tam, systemami i pokażecie, że one sobie działają, jak chcą, tak? [odchrząknięcie] I później zaczniecie włączać access control. Nagle to nie przejdzie, z innym użytkownikiem przejdzie. Włączycie input validation. Yy, pewne prompty wam przejdą, [stukanie] inne nie przejdą. Output filtering – dane będą filtrowane lub nie. Yy, zrobicie te thresholdy. Może właśnie jakaś kontrola będzie tak trochę-- yy, nie wiem, będzie miała jakieś subpunkty, tak? Albo właśnie będzie miała t-tak jak tu zrobiliśmy z tym atakiem, że powiedzmy powyżej dziewięćdziesięciu procent przepuszcza, pow-- poniżej nie-- yy, powyżej dziewięćdziesięciu procent nie przepuszcza, pow-- poniżej przepuszcza, tak? Więc jakby też zrobicie, że kontrola jest-- ma jakieś tam konkretne parametry i jak je, yy, przestawiacie, to macie różny output. [odchrząknięcie] I to fa-fajnie pokazuje właśnie najpierw te takie test case'y, gdzie to wszystko przechodzi versus nie przechodzi. 
+
+[Speaker 0]
+Mhm. Yy, czy takim core values jest bezpieczeństwo, czy bardziej taka produktywność nawet-- no czy jeżeli jest bezpie- 
+
+[Speaker 1]
+Bezpieczeństwo. 
+
+[Speaker 0]
+Bezpieczeństwo to jest, yy, to jest priorytet, tak? 
+
+[Speaker 1]
+Jakby, jakby waszym klientem tej całej platformy to jest de facto, ee, department IT, który to wdroży i będzie kazał... Wszyscy, którzy budują systemy agentowe, muszą się integrować z tym, ż-- jeśli chcą mieć dostęp do resource'ów. 
+
+[Speaker 3]
+To był-- będzie-- w opisie zadania tam było, yy, mniej więcej o to, że to jakby, no, mamy zapewnić bezpieczeństwo, nie spowalniając przy jednocześnie, jakby, innowacji. Czyli to nie-- to nie chodzi jak bardziej o to, że to ma być na przykład, że, że mamy byk-- mieć mały nakład na, na powiedzmy jeden prompt do agenta czasowy, czy... 
+
+[Speaker 1]
+Nie, to, to jest świetne. Znaczy, czyli żeby wasz, yy, jakby performance tego, yy, firewalla nie afektował. Yy, to jest pierwsza rzecz, a druga to, o, właśnie, na przykład moż-- moglibyście pokazać, że, yy, typowo, yy, agent się komunikuje, załóżmy, z jakimś MCP w ten sposób. I teraz gdybyśmy w ogóle chcieli to włączyć, to my możemy to włączyć w kompletnie transparentny sposób dla deweloperów versus wymagamy, żeby deweloper przestawił to, to, to i to, tak? Ee, to też jest jakby, yy, fajny aspekt do pokazania. 
+
+[Speaker 0]
+Mhm. Czyli taka integracja MCP, powiedzmy, że jest priorytetowa, jak rozumiem? Czy... 
+
+[Speaker 1]
+Między agentem a MCP? 
+
+[Speaker 0]
+Tak. 
+
+[Speaker 1]
+Tak, to jest przykład, bo jakby [odchrząknięcie] to, to, co ja chciałbym zobaczyć, zobacz, to, yy, jak masz, ee, 
+
+[Speaker 1]
+masz tego agenta, tak? No to on u-uzyskuje dostęp do MCP lub, powiedzmy, do innego agenta, tak? No ale ja chcę tutaj zaimplementować coś, co jakby... 
+
+[Speaker 1]
+Mhm. Zaimplementuje, yy, coś, co jakby zrobi enforcement pewnych kontroli. 
+
+[Speaker 0]
+Rozumiem, rozumiem, rozumiem, rozumiem. Dobra, dobra. I rozumiem, że to ma-- to, to powinno być coś, co po prostu będzie łatwe do wpięcia gdziekolwiek, tak? W jakieś systemy wasze. 
+
+[Speaker 1]
+Tak. 
+
+[Speaker 0]
+Okej, rozumiem. 
+
+[Speaker 1]
+Tak. 
+
+[Speaker 1]
+Pomyśl sobie, jakbyście to chcieli pójść z tym do Apache. 
+
+[Speaker 0]
+Tak? 
+
+[Speaker 1]
+Yy, Apache Software Foundation, zrobić open source'owy projekt i powiedzieć ludziom, którzy budują takie systemy: „Słuchajcie, możecie se to ściągnąć i będziecie mieć bezpieczniejsze te AI”. 
+
+[Speaker 0]
+Mhm, mhm, mhm. No to mamy w sumie więcej pomysłów. Tak że chcemy postawić jakieś proxy, że ten-- jakby, że request idzie właśnie, jakby, bezpośrednio do, do tego proxy, które właśnie tam na ty-- tam podejmuje tą decyzję, co, co dalej. Jakieś- 
+
+[Speaker 1]
+Dokładnie, tak. 
+
+[Speaker 0]
+...bezpieczeństwo, żeby coś takiego zrobić. 
+
+[Speaker 1]
+[odchrząknięcie] I też zobaczcie, jakby, to, to ja wam podaję jeden taki pattern architektoniczny, ale innym patternem może być, że, yy... Czekajcie, zmienię kolor. Że, 
+
+[Speaker 1]
+yy, jakby implementujecie sobie coś bliżej tych resoursów, tak? I powiedzmy, jak ktoś b-- definiuje sobie MCP, to sobie tutaj definiuje, że ja nie pozwalam na A, B i C, tak? Yy, to samo tutaj w agencie, [odchrząknięcie] ale powiedzmy warto mieć jakiś centralny system, że wiadomo, w organizacji nie możemy share'ować danych personalnych. To nieważne, co jest tutaj przy MCP, nieważne, co jest tu. Ważne, że jest jakaś taka metapolityka. Są różne, jakby, yy, jak to powiedzieć, patterny architektoniczne. No mi się najbardziej podoba, że jest po prostu jeden gateway i wszystko przepuszczamy przez ten gateway. 
+
+[Speaker 0]
+Mhm, mhm. 
+
+[Speaker 1]
+[odchrząknięcie] Ale to też może być kolekcja gatewayi, tak? 
+
+[Speaker 0]
+Tak, jasne. Może coś jeszcze? 
+
+[Speaker 1]
+Ostatnia rzecz to jest taka, że, yy, dla mnie jest istotne, że się-- będziecie się świetnie bawić i że się nauczycie, jak to budować, yy, i zobaczycie, jakie są problemy i właśnie dlaczego taki gateway jest potrzebny. Tak że to jest bardzo, bardzo ważny aspekt. Yy, on nie jest oceniany, ale [śmiech] to nie ma znaczenia, bo to, yy, dla was ważniejsze jest to, żeby się nauczyć, bo to jest coś, co jest w każdej firmie potrzebne. W każdej. 
+
+[Speaker 0]
+Mhm. No tak, no tak, tak. W ogóle- 
+
+[Speaker 1]
+Ilość agentów się zwiększa każdego dnia, tak? [odchrząknięcie] Ja w ogóle powiem wam, że we wcześniejszej firmie to kiedyś podałem komuś statystyki a-- à propos agentów. Ktoś mówi: „Nie wierzę, pokaż mi”. No to wziąłem, się zalogowałem i dalej było już to dużo większe. 
+
+[Speaker 0]
+Ale kiedy-- ale kiedy-- ale kiedy, to znaczy kiedy? 
+
+[Speaker 1]
+Wiesz co, z-- yy, to było z ro-- yy, z rok temu, bo ja w Globalności jestem od niedawna, bo wcześniej byłem gdzieś tam indziej. Yy, i chodzi o to, że jakby, yy, yy, co się zalogujesz do dashboarda, który pokazuje ilość agentów, to ta ilość się [naśladuje dźwięk przyrostu] zwiększa non stop. 
+
+[Speaker 0]
+[śmiech] Ludzie to jakby agentów już tam robią na poziomie firmy, jak są te właśnie, że tam, mm, że tworzą pod jakieś konkretne taski już- 
+
+[Speaker 1]
+Tak. 
+
+[Speaker 0]
+...to są takie firmy. Dobra, ostatnie pytanie w takim razie, już nie chcemy blokować. Yy, o coś jeszcze nie zapytaliśmy? Coś, co powinniśmy wiedzieć? 
+
+[Speaker 1]
+Nie, wydaje mi się, że wszystko. Bo słuchajcie- 
+
+[Speaker 0]
+Wszystko klarowne. 
+
+[Speaker 1]
+Tak, to- 
+
+[Speaker 0]
+Mhm 
+
+[Speaker 1]
+...zróbcie to, yy, [odchrząknięcie] czy na swoim kompie, czy zdeployujecie to. Ważne, żebyście później przyszli z gotowym kompem i pokazali właśnie taki, yy, case, yy, tak zwany negatywny najpierw. Sorry, yy, no tak, negatywny, czyli że wszystko działa, tak? A później pozytywny, zaczniecie włączać kontrole. 
+
+[Speaker 0]
+Dobra, a jeszcze takie pytanie, yy, technicz-- nie, w sensie techniczno-prawne. Yy, to, co zrobimy, jest wasze czy nasze? 
+
+[Speaker 1]
+Nie, my nie wy-- yy, macie w regulaminie. My nie, yy- 
+
+[Speaker 0]
+To jest różne z zaprojektowaniem. Wiem, że w regulaminie, dlatego się pytam konkretnie. 
+
+[Speaker 1]
+My nie bierzemy. 
+
+[Speaker 0]
+Okej, dobra. 
+
+[Speaker 1]
+Dlatego wam mówię, pomyślcie... Poczekajcie, zobaczcie. Yy, dobra. 
+
+[Speaker 1]
+Yy, znaczy... 
+
+[Speaker 1]
+Yy, muszę się przejść. [śmiech] Nie, nie, bo widzę, że tam, yy, chłopak, który od nas ma, zaraz kinął, to ja to muszę mu tam, yy, no wspomóc. Słuchajcie, ee, [odchrząknięcie] dlatego sobie pomyślcie, jakbyśmy to chcieli na was zopen source'ować i później, yy, budować z tego produkt. To jest fantastyczna opportunity. 
+
+[Speaker 0]
+Jasne. Dobra, dzięki w takim razie wielkie. 
+
+[Speaker 1]
+Dlatego też się, wiesz, zróbcie to w taki sposób, żeby to było, powiedzmy, extensible, ee, że jesteście w stanie 
+
+[Speaker 1]
+[szuranie] dzisiaj zrobić fajnie dwie kontrole, a jutro- 
+
+[Speaker 0]
+A lepiej nie zrobić, yy, powiedzmy, tak szerzej, ale bardziej powierzchownie, czy lepiej wgłębić się w jakiś use case, pokazać- 
+
+[Speaker 1]
+Wiesz co, to, to, co ja bym zrobił- 
+
+[Speaker 0]
+No? 
+
+[Speaker 1]
+[odchrząknięcie] Ale, yy, ja na to od razu wam powiem, nie będę patrzeć, bo na pewno przyjdą teamy, które zrobią powierzchownie pięć, a przyjdzie team, który zrobi porządnie jedną. Dla mnie będę oceniał to tak samo, ale ja wam, yy, proponuję, żeby właśnie wejść w głąb jednej kontroli i spróbować zrobić kilka przykładowych. Wiesz? 
+
+[Speaker 0]
+Okej, dobra, dobra. Dzięki w takim razie wielkie. 
+
+[Speaker 1]
+Do, do usłyszenia. 
+
+[Speaker 0]
+Czekajcie. 
+
+[Speaker 0]
+Zgłodniałem. 
+
+[Speaker 4]
+Zero. 
+
+[Speaker 0]
+Nagrałem wszystko. Tak?
