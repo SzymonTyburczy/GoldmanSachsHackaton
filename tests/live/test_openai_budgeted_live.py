@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import time
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +15,7 @@ from app.contracts import BudgetUnit, RequestContext, Role
 from app.pricing import DEFAULT_PRICING
 from app.provider_calls import summarize_with_budget
 from app.settings import Settings
+from scripts.reporting import write_json_report
 
 
 @pytest.mark.live
@@ -62,6 +63,7 @@ async def test_openai_token_count_and_summary_are_budgeted(tmp_path: Path) -> No
         max_tasks_per_principal=10,
         limit_version=1,
     )
+    started = time.perf_counter()
     _, summary, token_usage, summary_usage, _, _ = await summarize_with_budget(
         db_path=db_path,
         context=context,
@@ -77,32 +79,31 @@ async def test_openai_token_count_and_summary_are_budgeted(tmp_path: Path) -> No
         max_input_tokens=8192,
         max_output_tokens=128,
     )
+    latency_ms = round((time.perf_counter() - started) * 1000, 3)
 
     current = balances(db_path, unit=BudgetUnit.NUSD, task_id=task_id, principal_id="analyst-a")
     report_dir = Path(__file__).resolve().parents[2] / "var" / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / f"openai-smoke-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.json"
-    report_path.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "mode": "live",
-                "provider": "openai",
-                "requested_model": "gpt-6-luna",
-                "reported_model": summary_usage.model,
-                "recorded_at": datetime.now(UTC).isoformat(),
-                "input_tokens_counted": token_usage.input_tokens,
-                "input_tokens_used": summary_usage.input_tokens,
-                "output_tokens": summary_usage.output_tokens,
-                "estimated_cost_nusd": summary_usage.cost_nusd,
-                "pricing_version": summary_usage.pricing_version,
-                "summary_nonempty": bool(summary.text.strip()),
-                "reserved_balance_nusd": current["global"]["reserved"],
-            },
-            indent=2,
-        )
-        + "\\n",
-        encoding="utf-8",
+    write_json_report(
+        report_path,
+        {
+            "schema_version": 1,
+            "mode": "live",
+            "provider": "openai",
+            "requested_model": "gpt-6-luna",
+            "reported_model": summary_usage.model,
+            "recorded_at": datetime.now(UTC).isoformat(),
+            "latency_ms": latency_ms,
+            "latency_scope": "token count plus budget reservation and summary generation",
+            "input_tokens_counted": token_usage.input_tokens,
+            "input_tokens_used": summary_usage.input_tokens,
+            "output_tokens": summary_usage.output_tokens,
+            "estimated_cost_nusd": summary_usage.cost_nusd,
+            "pricing_version": summary_usage.pricing_version,
+            "summary_nonempty": bool(summary.text.strip()),
+            "reserved_balance_nusd": current["global"]["reserved"],
+        },
     )
     assert token_usage.input_tokens is not None
     assert summary_usage.input_tokens == token_usage.input_tokens

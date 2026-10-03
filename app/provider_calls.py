@@ -132,7 +132,7 @@ async def summarize_with_budget(
     )
     budget.mark_started(db_path, summary_reservation.reservation_id)
     try:
-        summary = await adapter.summarize(input=input)
+        summary = await adapter.summarize(input=input, max_output_tokens=max_output_tokens)
         priced_usage = price_openai_usage(summary.usage, pricing)
         if priced_usage.cost_nusd is None:
             raise ProviderCostUnavailable("OpenAI usage is unavailable")
