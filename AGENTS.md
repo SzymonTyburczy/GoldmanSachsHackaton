@@ -13,21 +13,21 @@ Na 3.10.2026 repo zawiera dokumentację; nie ma jeszcze implementacji ani wynik�
 
 ## Decyzje zespołu
 
-Dwie osoby, jeden projekt AI Control Layer dla Goldman Sachs. Osoba 1: gateway, dane, konfiguracja, audyt, panel i integracja. Osoba 2: OpenAI, semantyka, budżet i wspólny zestaw testów. Stos: Python 3.12, FastAPI, Pydantic 2, SQLite, prosty HTML/JS, uv, pytest i Ruff. Model aplikacji: OpenAI `gpt-6-luna` przez Responses API.
+Dwie osoby, jeden projekt AI Control Layer dla Goldman Sachs. Osoba 1: gateway, dane, konfiguracja, audyt, panel i integracja. Osoba 2: OpenAI/Jev, semantyka, budżet i wspólny zestaw testów. Stos: Python 3.12, FastAPI, Pydantic 2, SQLite, prosty HTML/JS, uv, pytest i Ruff. Generowanie: OpenAI `gpt-6-luna` przez Responses API. Ocena semantyczna: TypeSafe Jev `jev-1.13.0`. PII: lokalne Presidio Analyzer/Anonymizer i spaCy. Reguły gatewaya egzekwują wynik; Jev nie nadaje praw.
 
-Nie przywracaj czteroosobowego podziału, planu kilku projektów ani lokalnego detektora jako domyślnej decyzji. Archiwum jest historyczne. Rozbieżność wyboru OpenAI z oczekiwaniem modeli lokalnych w briefie pozostaje jawna we wspólnych ustaleniach.
+Nie przywracaj czteroosobowego podziału, planu kilku projektów ani lokalnego detektora jako domyślnej decyzji. Archiwum jest historyczne. Rozbieżność wyboru zewnętrznych API z oczekiwaniem modeli lokalnych w briefie pozostaje jawna we wspólnych ustaleniach.
 
 ## Zasady implementacji
 
 - Wykonuj wskazany krok w plikach właściciela. Uzgodnij z drugą osobą zmianę kontraktu, schematu bazy lub zależności przed edycją wspólnej części.
 - Tożsamość, role, klient, metadane dokumentów i model pochodzą ze sprawdzonego stanu serwera, nie z deklaracji agenta.
-- Kontroluj dostęp przed odczytem; redaguj dane przed każdym wyjściem do OpenAI, także liczeniem tokenów. Nie loguj surowych treści ani sekretów.
+- Kontroluj dostęp przed odczytem; redaguj dane przed każdym wyjściem do Jev lub OpenAI, także liczeniem tokenów. Presidio uzupełnia usuwanie pól i własne reguły sekretów; jego brak nie przepuszcza surowych danych. Nie loguj surowych treści ani sekretów.
 - Płatna operacja wymaga atomowej rezerwacji. Koszt detektora też podlega limitom. Timeout i restart nie kasują niepewnego kosztu.
 - Detektor nie znosi twardych zakazów. Jego awaria blokuje chronioną operację. Wynik na stubie nie jest testem prawdziwej semantyki.
 - Audyt odróżnia decyzję od skutku i pokazuje poszczególne adaptery. Blokada odpowiedzi nie oznacza braku wcześniejszego wykonania.
 - Zmiana polityki/feedu jest walidowana i wersjonowana. Błędna aktualizacja pozostawia ostatnią poprawną konfigurację; brak konfiguracji przy starcie zatrzymuje chroniony ruch.
 - Testuj zachowanie i rzeczywisty skutek. Wyniki wydajności i skuteczności podawaj dopiero po pomiarze. Brak klucza/modelu nie może dawać sukcesu testu live.
-- Nie dodawaj infrastruktury, drugiego modelu, MCP ani zgód człowieka kosztem podstaw. Nie deklaruj production-ready ani ochrony całego konta/chmury.
+- Nie dodawaj infrastruktury, kolejnych modeli poza Jev i Luną, MCP ani zgód człowieka kosztem podstaw. Nie deklaruj production-ready ani ochrony całego konta/chmury.
 
 ## Źródła
 

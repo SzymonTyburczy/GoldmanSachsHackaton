@@ -8,8 +8,8 @@ Obowiązują dla ludzi i używanych przez nich asystentów AI. Kolejność zada�
 
 | Właściciel | Planowane pliki / katalogi |
 |---|---|
-| Osoba 1 | `app/main.py`, `app/api/`, `app/gateway.py`, `app/auth.py`, `app/policy.py`, `app/audit.py`, `app/controls/access.py`, `app/controls/redaction.py`, `app/controls/artifacts.py`, `app/adapters/documents.py`, `app/static/` |
-| Osoba 2 | `app/controls/semantic.py`, `app/budget.py`, `app/adapters/openai_luna.py`, `app/prompts/`, `tests/semantic/`, `tests/budget/`, `tests/live/`, `scripts/evaluate.py`, `scripts/benchmark.py` |
+| Osoba 1 | `app/main.py`, `app/api/`, `app/gateway.py`, `app/auth.py`, `app/policy.py`, `app/audit.py`, `app/controls/access.py`, `app/controls/redaction.py`, `app/pii/`, `app/controls/artifacts.py`, `app/adapters/documents.py`, `app/static/` |
+| Osoba 2 | `app/controls/semantic.py`, `app/budget.py`, `app/adapters/openai_luna.py`, `app/adapters/jev.py`, `app/prompts/`, `tests/semantic/`, `tests/budget/`, `tests/live/`, `scripts/evaluate.py`, `scripts/benchmark.py` |
 | Wspólne; zapis koordynuje osoba 1 | `app/contracts.py`, `app/db.py`, `app/schema.sql`, `config/`, `pyproject.toml`, `uv.lock`, `Makefile`, README i dokumentacja |
 | Testy własnej części | Osoba 1: `tests/gateway/`, `tests/policy/`, `tests/data/`, `tests/audit/`. Osoba 2 scala wykonanie całego zestawu. |
 
@@ -51,11 +51,11 @@ Jeśli potrzebna jest zmiana wspólnego kontraktu, wskaż ją przed edycją.
 
 Przed przyjęciem kodu właściciel musi umieć wyjaśnić: jakie dane przyjmuje funkcja, skąd bierze uprawnienia, jaki ma skutek i co dzieje się przy błędzie. Gdy tego nie rozumiesz, poproś AI o wyjaśnienie na jednym przykładzie i przeczytaj implementację.
 
-Nie przekazujcie asystentom kluczy API. Klucz wpisuje właściciel konta lokalnie; do repo trafia wyłącznie `.env.example` z pustymi wartościami. Model w Codex i model wywoływany przez aplikację mają osobną konfigurację i dostęp. Wybór Luna w edytorze nie ustawia modelu backendu.
+Nie przekazujcie asystentom kluczy API. Klucze OpenAI i TypeSafe wpisuje właściciel kont lokalnie; do repo trafia wyłącznie `.env.example` z pustymi wartościami. Model w Codex i model wywoływany przez aplikację mają osobną konfigurację i dostęp. Wybór Luna w edytorze nie ustawia modelu backendu.
 
 ## 5. Zależności i środowisko
 
-- Jeden Python 3.12 i jeden `uv.lock`. Osoba 1 tworzy projekt, osoba 2 sprawdza go na swoim laptopie.
+- Jeden Python 3.12 i jeden `uv.lock`. Osoba 1 tworzy projekt, osoba 2 sprawdza go na swoim laptopie. Modele spaCy pobieramy w setupie i przypinamy ich wersje; aplikacja nie pobiera ich podczas obsługi żądania.
 - Wersje pakietów są przypinane przy pierwszej instalacji i zapisywane w lockfile. Nie wpisujemy nieprzetestowanych wersji patch do planu.
 - Po sklonowaniu używamy `uv sync --locked`. Zmiana zależności wymaga uzgodnienia i aktualizacji lockfile w tym samym commicie.
 - Do zakończenia podstaw używamy wyłącznie stosu z dokumentacji. Dodatkowa biblioteka musi skracać konkretne zadanie.
@@ -70,7 +70,7 @@ Nie przekazujcie asystentom kluczy API. Klucz wpisuje właściciel konta lokalni
 - Zmiany polityki/API/schematu mają aktualną dokumentację. Kod i UI są po angielsku, instrukcje zespołu po polsku.
 - Druga osoba potrafi uruchomić przykład i odczytać wynik.
 
-Planowane komendy: `make check` — Ruff; `make test` — testy bez płatnych wywołań; `make test-live` — prawdziwe OpenAI; `make verify` — wszystkie powyższe. Brak klucza w `test-live`/`verify` oznacza brak pełnej weryfikacji i niezerowy kod wyjścia. Nie uruchamiajcie płatnych testów przy każdym zapisie.
+Planowane komendy: `make check` — Ruff; `make test` — testy bez płatnych wywołań; `make test-live` — prawdziwe Jev i OpenAI; `make verify` — wszystkie powyższe. Brak klucza w `test-live`/`verify` oznacza brak pełnej weryfikacji i niezerowy kod wyjścia. Nie uruchamiajcie płatnych testów przy każdym zapisie.
 
 Zmiana samej dokumentacji wymaga sprawdzenia linków, zgodności kontraktów i `git diff --check`; nie wymaga wywołań API.
 

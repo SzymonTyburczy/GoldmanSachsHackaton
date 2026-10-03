@@ -17,12 +17,14 @@ Warstwa kontroli pomiędzy aplikacją/agentem a dokumentami i modelami AI. Spraw
 | Backend | Python 3.12, FastAPI, Pydantic 2, Uvicorn |
 | Dane | SQLite, standardowy moduł `sqlite3` |
 | Panel | HTML, CSS i JavaScript z `fetch`, serwowane przez FastAPI |
-| AI aplikacji | OpenAI `gpt-6-luna`, Responses API, oficjalny SDK Python |
+| Model generujący | OpenAI `gpt-6-luna`, Responses API, oficjalny SDK Python |
+| Ocena semantyczna | TypeSafe Jev `jev-1.13.0`, osobny adapter HTTP |
+| Wykrywanie i maskowanie PII | Presidio: `presidio-analyzer`, `presidio-anonymizer`, lokalne modele spaCy |
 | Praca nad kodem | Codex z modelem Luna; zasady w CONTRIBUTING |
 | Narzędzia | uv, pytest, pytest-asyncio, HTTPX, Ruff |
 | Uruchomienie demo | Jeden laptop, jeden proces aplikacji, przeglądarka i dostęp do internetu |
 
-Model i konkretne ustawienia są opisane w jednym miejscu: we wspólnych ustaleniach. Dostęp do API, działanie modelu i wersje pakietów trzeba potwierdzić w pierwszym etapie implementacji.
+Modele i konkretne ustawienia są opisane w jednym miejscu: we wspólnych ustaleniach. Dostęp do API, działanie modelu i wersje pakietów trzeba potwierdzić w pierwszym etapie implementacji.
 
 ## Materiały źródłowe
 
