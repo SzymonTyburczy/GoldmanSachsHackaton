@@ -21,7 +21,10 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from app import db
+from fastapi.testclient import TestClient
+from pydantic import SecretStr
+
+from app import db, policy
 from app.adapters.documents import CatalogEntry
 from app.adapters.jev import JevAdapter
 from app.adapters.openai_luna import OpenAILunaAdapter
@@ -38,6 +41,7 @@ from app.contracts import (
 from app.controls import access
 from app.controls.redaction import remove_fields
 from app.controls.semantic import build_jev_state, evaluate
+from app.main import create_app
 from app.policy import CONFIG_FILES, DEFAULT_CONFIG_DIR, Policy, read_config_file
 from app.pricing import DEFAULT_PRICING
 from app.provider_calls import assess_with_budget, summarize_with_budget
@@ -255,11 +259,139 @@ def _local_benchmark(iterations: int) -> dict[str, Any]:
         "field_filter": _percentile_summary(field_filter_times),
         "sqlite_fixture_reserve_start_settle": _percentile_summary(budget_times),
         "fixture_credits_spent": iterations,
-        "pii_engine": "not measured: Presidio gateway integration is not yet implemented",
+        "pii_engine": "not measured in offline profile; measured in live_gateway when enabled",
         "scope_note": (
             "Local component timings only; excludes HTTP gateway, Presidio analysis, "
             "provider calls, "
             "and audit. Fixture credits are not USD and do not measure model inference."
+        ),
+    }
+
+
+def _gateway_live_benchmark(threshold: float) -> dict[str, Any]:
+    """Measure 12 held-out cases through the complete live HTTP gateway path."""
+    base = Settings.from_env()
+    if base.typesafe_api_key is None or base.openai_api_key is None:
+        raise RuntimeError("both provider keys are required for the gateway benchmark")
+    token = SecretStr(
+        base.token_analyst_a.get_secret_value()
+        if base.token_analyst_a is not None
+        else "gateway-benchmark-token-0123456789abcdef"
+    )
+
+    with tempfile.TemporaryDirectory(prefix="controlproof-gateway-benchmark-") as directory:
+        db_path = Path(directory) / "benchmark.sqlite3"
+        settings = Settings(
+            db_path=db_path,
+            documents_dir=base.documents_dir,
+            token_analyst_a=token,
+            openai_api_key=base.openai_api_key,
+            typesafe_api_key=base.typesafe_api_key,
+        )
+        db.init_db(db_path)
+        with closing(db.connect(db_path)) as conn:
+            policy.activate(
+                conn,
+                "policy",
+                read_config_file("policy", DEFAULT_CONFIG_DIR / CONFIG_FILES["policy"]),
+                expected_version=None,
+                created_by="benchmark",
+            )
+            policy.activate(
+                conn,
+                "feed",
+                read_config_file("feed", DEFAULT_CONFIG_DIR / CONFIG_FILES["feed"]),
+                expected_version=None,
+                created_by="benchmark",
+            )
+
+        headers = {"Authorization": f"Bearer {token.get_secret_value()}"}
+        latencies: list[float] = []
+        costs: list[int] = []
+        cases: list[dict[str, Any]] = []
+        errors: list[dict[str, str]] = []
+        false_positives = 0
+        false_negatives = 0
+        last_task_id: str | None = None
+        with TestClient(create_app(settings)) as client:
+            for case in EVALUATION_CASES:
+                task_response = client.post(
+                    "/v1/tasks",
+                    json={"schema_version": 1, "client_id": "client-a"},
+                    headers=headers,
+                )
+                if task_response.status_code != 201:
+                    errors.append({"case_id": case.case_id, "error_type": "task_creation"})
+                    continue
+                task_id = task_response.json()["task_id"]
+                last_task_id = task_id
+                started = time.perf_counter()
+                response = client.post(
+                    "/v1/execute",
+                    json={
+                        "schema_version": 1,
+                        "task_id": task_id,
+                        "tool": "documents.summarize",
+                        "arguments": {
+                            "document_id": "doc-a",
+                            "prompt": case.content,
+                        },
+                    },
+                    headers=headers | {"Idempotency-Key": str(uuid4())},
+                )
+                elapsed_ms = (time.perf_counter() - started) * 1000
+                if response.status_code != 200:
+                    errors.append({"case_id": case.case_id, "error_type": "http_error"})
+                    continue
+                body = response.json()
+                blocked = body["decision"] == "DENY"
+                cost = sum(usage.get("cost_nusd") or 0 for usage in body.get("usage", []))
+                latencies.append(elapsed_ms)
+                costs.append(cost)
+                false_positives += int(not case.malicious and blocked)
+                false_negatives += int(case.malicious and not blocked)
+                cases.append(
+                    {
+                        "case_id": case.case_id,
+                        "language": case.language,
+                        "expected_malicious": case.malicious,
+                        "blocked": blocked,
+                        "decision": body["decision"],
+                        "reason_code": body["reason_code"],
+                        "execution_status": body["execution_status"],
+                        "adapter_calls": body["adapter_calls"],
+                        "latency_ms": round(elapsed_ms, 3),
+                        "cost_nusd": cost,
+                    }
+                )
+
+        remaining = (
+            balances(
+                db_path,
+                unit=BudgetUnit.NUSD,
+                task_id=UUID(last_task_id),
+                principal_id="analyst-a",
+            )
+            if last_task_id is not None
+            else {"global": {"spent": 0, "reserved": 0}}
+        )
+
+    return {
+        "profile": "live_http_gateway_pipeline",
+        "mode": "live",
+        "threshold": threshold,
+        "sample_count": len(cases),
+        "case_errors": errors,
+        "false_positives": false_positives,
+        "false_negatives": false_negatives,
+        "latency": _percentile_summary(latencies),
+        "total_cost_nusd": sum(costs),
+        "cost_p50_nusd": _percentile(costs, 50),
+        "final_global_balance_nusd": remaining["global"],
+        "cases": cases,
+        "scope_note": (
+            "Full TestClient gateway path including ACL, local Presidio, Jev, Luna, "
+            "budget and audit; only held-out synthetic cases are used."
         ),
     }
 
@@ -422,6 +554,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iterations", type=int, default=100)
     parser.add_argument("--live", action="store_true", help="also run 12 billable synthetic cases")
+    parser.add_argument(
+        "--gateway-live",
+        action="store_true",
+        help="also run 12 billable cases through the complete HTTP gateway",
+    )
     parser.add_argument("--threshold", type=float, default=0.80)
     args = parser.parse_args()
     if args.iterations <= 0:
@@ -452,8 +589,21 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+    if args.gateway_live:
+        try:
+            report["live_gateway"] = _gateway_live_benchmark(args.threshold)
+        except Exception as exc:
+            report["live_gateway"] = {"passed": False, "error_type": type(exc).__name__}
+            report_path = _write_report(report, mode="gateway")
+            print(
+                f"Gateway live benchmark failed ({type(exc).__name__}); report: {report_path}",
+                file=sys.stderr,
+            )
+            return 1
 
-    mode = "live" if args.live else "offline"
+    mode = (
+        "gateway" if args.gateway_live and not args.live else ("live" if args.live else "offline")
+    )
     report_path = _write_report(report, mode=mode)
     offline = report["offline"]
     print(
@@ -479,6 +629,17 @@ def main() -> int:
         print(
             f"  FP/FN={live['false_positives']}/{live['false_negatives']}; "
             f"estimated cost={live['estimated_total_cost_nusd']} nUSD"
+        )
+    if args.gateway_live:
+        gateway = report["live_gateway"]
+        print(
+            "Live gateway profile: "
+            f"{gateway['sample_count']} cases; p50/p95="
+            f"{gateway['latency']['p50_ms']}/{gateway['latency']['p95_ms']} ms"
+        )
+        print(
+            f"  FP/FN={gateway['false_positives']}/{gateway['false_negatives']}; "
+            f"estimated cost={gateway['total_cost_nusd']} nUSD"
         )
     return 0
 
