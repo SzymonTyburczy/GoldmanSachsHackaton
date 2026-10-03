@@ -128,6 +128,7 @@ class ReasonCode(StrEnum):
     UPSTREAM_FAILED = "UPSTREAM_FAILED"
     UPSTREAM_TIMEOUT = "UPSTREAM_TIMEOUT"
     AUDIT_UNAVAILABLE = "AUDIT_UNAVAILABLE"
+    VERSION_CONFLICT = "VERSION_CONFLICT"  # expected_version is no longer the active one
     # Returned only by API routes that are still skeletons; never by a control.
     NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
 

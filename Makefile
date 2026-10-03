@@ -1,4 +1,4 @@
-# ControlProof developer commands. Implemented: setup, dev, check, format, test.
+# ControlProof developer commands. Implemented: setup, dev, check, format, test, reload-config.
 # Targets marked "not implemented" fail on purpose so they never look like a passed check.
 
 UV ?= uv
@@ -8,22 +8,26 @@ PORT ?= 8000
 WITH_ENV = $$(test -f .env && echo --env-file=.env)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup dev check format test test-live verify benchmark reload-config reset-demo
+.PHONY: help setup dev check format test test-live verify reload-config benchmark reset-demo
 
 help:
-	@echo "setup      install locked dependencies, create .env, fill empty demo tokens, initialise the database"
+	@echo "setup      install locked dependencies, create .env, fill empty demo tokens, initialise the"
+	@echo "           database, activate config/ if nothing is active, check the local Presidio engine"
 	@echo "dev        run the API and panel on http://$(HOST):$(PORT) (one process, one worker)"
 	@echo "check      Ruff lint and format check"
 	@echo "format     apply Ruff formatting and safe fixes"
 	@echo "test       offline tests; network to TypeSafe and OpenAI is blocked"
 	@echo "test-live  paid Jev and Luna tests (not implemented yet, B5)"
 	@echo "verify     check + test + test-live"
+	@echo "reload-config  validate config/policy.json and config/threat-feed.json, activate changes"
 
 setup:
 	$(UV) sync --locked
 	@test -f .env || { cp .env.example .env && chmod 600 .env && echo "Created .env from .env.example; fill in local values."; }
 	$(UV) run python -m app.auth .env
 	$(UV) run $(WITH_ENV) python -m app.db
+	$(UV) run $(WITH_ENV) python -m app.policy seed
+	$(UV) run python -m app.pii.engine
 
 dev:
 	$(UV) run $(WITH_ENV) uvicorn --factory app.main:create_app --host $(HOST) --port $(PORT)
@@ -44,5 +48,8 @@ test-live:
 
 verify: check test test-live
 
-benchmark reload-config reset-demo:
+reload-config:
+	$(UV) run $(WITH_ENV) python -m app.policy reload
+
+benchmark reset-demo:
 	@echo "$@ is not implemented yet." >&2; exit 1

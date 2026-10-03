@@ -2,22 +2,23 @@
 
 Warstwa kontroli pomiędzy aplikacją/agentem a dokumentami i modelami AI. Sprawdza dostęp, usuwa wskazane dane wrażliwe, wykrywa podejrzane instrukcje, ogranicza zużycie i zapisuje wynik każdej operacji.
 
-**Stan na 3.10.2026:** ukończone kroki A1 (szkielet), A2 (tożsamość, zadania i dostęp do dokumentów) i A3 (audyt). Działają: `GET /health`, uwierzytelnienie trzema tokenami demo, tworzenie i odczyt zadań, `documents.read` z kontrolą klienta przed odczytem treści i usuwaniem pól według roli oraz audyt każdego kroku: historia zadania (`GET /v1/tasks/{id}/events`), lista zdarzeń (`GET /admin/events`) i eksport JSONL (`GET /admin/audit/export`). Adaptery Jev i Luna (B2) oraz rezerwacje budżetu (B3) istnieją jako moduły z testami offline; gateway wywoła je w A5. Podsumowanie, artefakty i pozostałe endpointy admina odpowiadają `501 NOT_IMPLEMENTED`. Polityka i Presidio jeszcze nie działają. Plan dotyczy **dwóch osób**.
+**Stan na 3.10.2026:** ukończone kroki A1 (szkielet), A2 (tożsamość, zadania i dostęp do dokumentów), A3 (audyt) i A4 (polityka i redakcja). Działają: `GET /health`, uwierzytelnienie trzema tokenami demo, tworzenie i odczyt zadań, `documents.read` z kontrolą narzędzia i klienta przed odczytem treści, usuwaniem pól według roli z polityki i maskowaniem PII oraz sekretów (lokalne Presidio i własna reguła), wersjonowana polityka (`GET`/`PUT /admin/policy`, `make reload-config`) oraz audyt każdego kroku z historią zadania, listą zdarzeń i eksportem JSONL. Adaptery Jev i Luna (B2) oraz rezerwacje budżetu (B3) istnieją jako moduły z testami offline; gateway wywoła je w A5 na danych z `prepare_provider_input`. Podsumowanie, artefakty, feed i pozostałe endpointy admina odpowiadają `501 NOT_IMPLEMENTED`. Plan dotyczy **dwóch osób**.
 
 ## Uruchomienie
 
 Wymagane: [uv](https://docs.astral.sh/uv/) i dostęp do internetu przy pierwszej instalacji. uv pobiera Pythona 3.12, pakiety i modele spaCy według `uv.lock`.
 
 ```bash
-make setup   # uv sync --locked, .env z .env.example (jeśli brak), puste tokeny demo, lokalna baza
+make setup   # uv sync --locked, .env z .env.example (jeśli brak), puste tokeny demo, lokalna baza, import config/, test Presidio
 make dev     # API i panel: http://127.0.0.1:8000
 make check   # Ruff
 make test    # testy offline; sieć do TypeSafe i OpenAI jest zablokowana
+make reload-config  # walidacja i aktywacja zmienionych config/policy.json i config/threat-feed.json
 ```
 
-`make test-live`, `make verify`, `make benchmark`, `make reload-config` i `make reset-demo` jeszcze nie istnieją. Kończą się błędem, żeby nie udawały udanej weryfikacji.
+`make test-live`, `make verify`, `make benchmark` i `make reset-demo` jeszcze nie istnieją. Kończą się błędem, żeby nie udawały udanej weryfikacji.
 
-API wymaga nagłówka `Authorization: Bearer <token>` z `.env`: `CONTROLPROOF_TOKEN_ANALYST_A`, `CONTROLPROOF_TOKEN_REVIEWER_A` lub `CONTROLPROOF_TOKEN_ADMIN`. Tokenu nie podaje się w URL. `POST /v1/execute` wymaga aktywnej polityki i feedu. Ich import powstaje w A4, więc do tego czasu odpowiada `503 INVALID_CONFIG`; przepływ dokumentów sprawdzają testy w `tests/gateway/`.
+API wymaga nagłówka `Authorization: Bearer <token>` z `.env`: `CONTROLPROOF_TOKEN_ANALYST_A`, `CONTROLPROOF_TOKEN_REVIEWER_A` lub `CONTROLPROOF_TOKEN_ADMIN`. Tokenu nie podaje się w URL. `POST /v1/execute` wymaga aktywnej polityki i feedu; `make setup` aktywuje je z `config/`, jeśli baza jeszcze ich nie ma. Później źródłem prawdy jest wersja w bazie: zmiany wprowadza admin przez `PUT /admin/policy` albo `make reload-config`.
 
 ## Czytaj w tej kolejności
 
