@@ -236,6 +236,12 @@ def reconcile_after_restart(db_path: Path) -> int:
         return cursor.rowcount
 
 
+def get_reservation(db_path: Path, reservation_id: UUID) -> Reservation:
+    """Read one reservation without mutating balances or lifecycle state."""
+    with closing(db.connect(db_path)) as conn:
+        return _read_reservation(conn, reservation_id)
+
+
 def balances(
     db_path: Path, *, unit: BudgetUnit, task_id: UUID, principal_id: str
 ) -> dict[str, dict[str, int]]:
