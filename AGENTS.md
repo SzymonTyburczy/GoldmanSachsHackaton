@@ -9,7 +9,7 @@ Odpowiadaj po polsku, konkretnie. Kod, nazwy API, UI i materiały konkursowe pis
 3. [Plan dwóch osób](docs/PLAN_DWOCH_OSOB.md) — kolejność zadań i odbiór.
 4. [Wspólne ustalenia](docs/WSPOLNE_USTALENIA.md) — obowiązujące kontrakty i technologie.
 
-Na 3.10.2026 repo zawiera dokumentację; nie ma jeszcze implementacji ani wyników testów. Sprawdź aktualny stan przed kodowaniem. Planowane komendy i struktura katalogów nie są dowodem ich istnienia.
+Na 3.10.2026 repo zawiera dokumentację i szkielet z kroku A1: kontrakty, schemat SQLite, `/health`, panel oraz endpointy odpowiadające `501`. Kontrole, adaptery i wyniki testów live jeszcze nie istnieją. Sprawdź aktualny stan przed kodowaniem. Planowane komendy i struktura katalogów nie są dowodem ich istnienia.
 
 ## Decyzje zespołu
 

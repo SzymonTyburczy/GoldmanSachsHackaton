@@ -38,7 +38,7 @@ Zakres podstawowy: dostęp, redakcja, jeden detektor AI, budżet, feed artefakt�
 | Testy | pytest, pytest-asyncio, HTTPX | Testy jednostkowe, HTTP, współbieżności i live |
 | Kontrola kodu | Ruff | Formatowanie i lint |
 
-Osoba 1 podczas A1 zapisuje faktycznie zainstalowane wersje w `uv.lock`; osoba 2 sprawdza odtworzenie przez `uv sync --locked`. Nie potrzebujemy osobnego frontendu Node, ORM ani wdrożenia chmurowego do podstawowego demo. Dokumentacja: [FastAPI](https://fastapi.tiangolo.com/), [uv: lockfile](https://docs.astral.sh/uv/concepts/projects/sync/).
+Osoba 1 podczas A1 zapisuje faktycznie zainstalowane wersje w `uv.lock`; osoba 2 sprawdza odtworzenie przez `uv sync --locked`. Zainstalowane w A1: Python 3.12.14, FastAPI 0.142.2 (Starlette 1.7.0), Pydantic 2.13.5, Uvicorn 0.54.0, HTTPX 0.28.1, `openai` 3.24.0, Presidio 2.2.364, spaCy 3.8.16 z `en_core_web_sm` i `pl_core_news_sm` 3.8.0 (wheele przypięte w lockfile), pytest 9.1.1, pytest-asyncio 1.4.0, Ruff 0.16.10. Natywna telemetria OpenTelemetry w FastAPI jest wyłączona, bo może eksportować treść błędów walidacji. Nie potrzebujemy osobnego frontendu Node, ORM ani wdrożenia chmurowego do podstawowego demo. Dokumentacja: [FastAPI](https://fastapi.tiangolo.com/), [uv: lockfile](https://docs.astral.sh/uv/concepts/projects/sync/).
 
 ### Podział między Jev, Presidio i Lunę
 
@@ -146,6 +146,22 @@ Adapter Jev wymaga odpowiedzi na oba pytania, prawidłowego typu `noul` i skońc
 Wynik API zawiera `schema_version`, `request_id`, `task_id`, `decision`, `reason_code`, `policy_version`, `execution_status`, `adapter_calls`, `output`, `redacted_fields`, `usage`, `audit_event_ids`. Przy `DENY` pole `output=null`; przy redakcji i udanym wykonaniu decyzja końcowa to `REDACT`. `usage` jest listą wywołań; status w wyniku dotyczy narzędzia żądanego przez klienta, szczegóły zależności są w audycie.
 
 Minimalne kody: `OK`, `AUTH_REQUIRED`, `INVALID_INPUT`, `TASK_FORBIDDEN`, `CLIENT_FORBIDDEN`, `MODEL_FORBIDDEN`, `TOOL_FORBIDDEN`, `PII_REDACTED`, `SEMANTIC_RISK`, `DETECTOR_UNAVAILABLE`, `PII_ENGINE_UNAVAILABLE`, `BUDGET_EXCEEDED`, `CONCURRENCY_EXCEEDED`, `INPUT_TOO_LARGE`, `TOKEN_COUNT_UNAVAILABLE`, `ARTIFACT_BLOCKED`, `INVALID_CONFIG`, `UPSTREAM_FAILED`, `UPSTREAM_TIMEOUT`, `AUDIT_UNAVAILABLE`.
+
+### Doprecyzowania z A1 — do potwierdzenia przez osobę 2
+
+Kod w `app/contracts.py` doprecyzowuje tabelę powyżej. Zmiana tych ustaleń jest zmianą kontraktu.
+
+- Modele są niemutowalne i odrzucają nieznane pola. Liczby całkowite i `schema_version` nie przyjmują `true`, `1.0` ani `"1"`. Czas bez strefy jest błędem i jest normalizowany do UTC.
+- `policy_version`, `feed_version` i `limit_version` to rosnące liczby całkowite od 1. `role` przyjmuje `analyst`, `reviewer` lub `admin`. Tożsamość jest w `principal_id`, np. `analyst-a`.
+- `control_id` ma wartości `gateway`, `access`, `redaction`, `semantic`, `budget` i `artifacts`. `gateway` obejmuje uwierzytelnienie, schemat, idempotencję i limity żądania.
+- `adapter_calls` to obiekt z polami `document_read`, `token_count`, `detector`, `summary` i `artifact_admit`. Każde pole ma `execution_status`, domyślnie `NOT_CALLED`.
+- `Usage` ma dodatkowo `requested_model`, czyli nazwę z polityki. `model` jest nazwą z odpowiedzi dostawcy albo `null`. Wszystkie pola trzeba podać jawnie. `calculated` wymaga pełnego usage, kosztu i `pricing_version`, a `estimated` wymaga kwoty.
+- `SemanticResult` wymaga `risk_score = max(...)`. Kategoria inna niż `benign` musi wskazywać pytanie o najwyższym wyniku. Wartości NaN, spoza 0–1 i bool są błędem.
+- `Reservation` używa jednostki `test_credit` wtedy i tylko wtedy, gdy `purpose=fixture`. `nusd` wymaga `pricing_version`.
+- `AuditEvent` ma dodatkowo `schema_version`, `tool`, `agent_id`, `client_id`, `redacted_fields`, `redacted_entity_counts` (tylko typ encji → liczba) i `semantic`. Wartości niedostępne, np. przed załadowaniem polityki, to `null`.
+- `output` jest obiektem z polem `kind`: `document` (`document_id`, `fields`), `summary` (`document_id`, `text`) lub `artifact` (`artifact_id`, `sha256`). `DENY` wymaga `output=null`. `ALLOW`/`REDACT` wymagają `SUCCEEDED`, `output` i kodu `OK`/`PII_REDACTED`.
+- Błędy HTTP mają postać `ErrorResponse`: `schema_version`, `request_id`, `reason_code` i przy `422` listę `errors` z polami `loc` i `type`, bez przesłanych wartości. Kod `NOT_IMPLEMENTED` zwracają wyłącznie trasy szkieletu.
+- Schemat SQLite jest w `app/schema.sql` (`PRAGMA user_version = 1`). Nieznana wersja zatrzymuje start. `audit_events` jest tylko do dopisywania. `budget_accounts` przechowuje `spent`/`reserved`, a limit pochodzi z aktywnej polityki w chwili rezerwacji. Tabele budżetu domyka osoba 2 w B3.
 
 ## 5. API, tożsamości i dane demo
 
@@ -286,7 +302,7 @@ Każda kontrola ma test wykrywający jej wyłączenie w kopii testowej. Zestaw A
 | `make reload-config` | Zweryfikowany import plików polityki/feedu przez wspólną ścieżkę aktywacji |
 | `make reset-demo` | Reset wyłącznie syntetycznych zadań i lokalnej bazy demo, po świadomym wywołaniu przez operatora |
 
-W tej rewizji komendy nie są jeszcze zaimplementowane. README otrzyma sprawdzone instrukcje podczas A7/B6. Reset nie resetuje rzeczywistego rachunku dostawcy. Każdy raport podaje datę, model, konfigurację, commit, liczebność, błędy i zakres; offline oraz live są widoczne osobno.
+Po A1 działają `make setup`, `make dev`, `make check` i `make test`. Pozostałe komendy kończą się błędem do czasu implementacji. README otrzyma sprawdzone instrukcje podczas A7/B6. Reset nie resetuje rzeczywistego rachunku dostawcy. Każdy raport podaje datę, model, konfigurację, commit, liczebność, błędy i zakres; offline oraz live są widoczne osobno.
 
 ## 10. Warunki ukończenia
 
