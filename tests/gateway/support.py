@@ -4,8 +4,10 @@ and provider stubs."""
 import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from app import db, policy
 from app.adapters.jev import JEV_MODEL
@@ -40,6 +42,19 @@ def activate_config(
             created_by="test",
         )
     return stored.version
+
+
+def store_task(db_path: Path, principal_id: str, client_id: str = "client-a") -> str:
+    """A task written straight to the database, for tests where the API cannot create one
+    because no valid policy is active."""
+    task_id = str(uuid4())
+    with closing(db.connect(db_path)) as conn:
+        conn.execute(
+            "INSERT INTO tasks (task_id, principal_id, agent_id, client_id, created_at)"
+            " VALUES (?, ?, 'demo-agent', ?, ?)",
+            (task_id, principal_id, client_id, db.to_db_time(datetime.now(UTC))),
+        )
+    return task_id
 
 
 def break_audit(db_path: Path, stage: str) -> None:

@@ -83,6 +83,7 @@ def test_access_log_drops_query_strings(
     assert caplog.messages == ['127.0.0.1:5000 - "GET /v1/tasks/x HTTP/1.1" 401']
 
 
+@pytest.mark.usefixtures("active_config")
 def test_each_token_maps_to_its_server_side_identity(
     client: TestClient, headers: dict[str, dict[str, str]]
 ) -> None:

@@ -25,6 +25,7 @@ from app.contracts import (
 )
 from app.controls import access
 from app.gateway import Gateway
+from app.tasks import NoActivePolicy, TaskLimitReached
 from app.tasks import create_task as insert_task
 from app.tasks import get_task as load_task
 
@@ -35,12 +36,22 @@ router = APIRouter(prefix="/v1")
 def create_task(
     body: CreateTaskRequest, principal: CurrentPrincipal, request: Request
 ) -> TaskResponse:
-    """Create a task owned by the caller, for a client within the caller's scope."""
+    """Create a task owned by the caller, for a client within the caller's scope.
+
+    ``resources.max_tasks_per_principal`` of the active policy is checked here, so a task
+    over the limit is refused (``429 BUDGET_EXCEEDED``) instead of stored. Without a valid
+    active policy no task is created (``503 INVALID_CONFIG``).
+    """
     scope = access.check_client_scope(principal, body.client_id)
     if scope.decision is Decision.DENY:
         raise ApiError(403, scope.reason_code)
     with closing(db.connect(request.app.state.settings.db_path)) as conn:
-        task = insert_task(conn, principal, body.client_id)
+        try:
+            task = insert_task(conn, principal, body.client_id)
+        except NoActivePolicy:
+            raise ApiError(503, ReasonCode.INVALID_CONFIG) from None
+        except TaskLimitReached:
+            raise ApiError(429, ReasonCode.BUDGET_EXCEEDED) from None
     return task.to_response()
 
 

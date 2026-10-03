@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.settings import DEFAULT_DOCUMENTS_DIR, Settings
-from tests.gateway.support import activate_config
+from tests.gateway.support import activate_config, store_task
 
 
 @pytest.fixture
@@ -68,14 +68,15 @@ def test_unreadable_document_fails_closed(
 def test_protected_operations_need_an_active_policy_and_feed(
     client: TestClient,
     db_path: Path,
-    new_task: Callable[..., str],
     execute: Callable[..., httpx.Response],
     active: list[str],
 ) -> None:
     for kind in active:
         activate_config(db_path, kind)
 
-    response = execute("analyst-a", new_task("analyst-a"), "documents.read", document_id="doc-a")
+    response = execute(
+        "analyst-a", store_task(db_path, "analyst-a"), "documents.read", document_id="doc-a"
+    )
 
     assert response.status_code == 503
     assert response.json()["reason_code"] == "INVALID_CONFIG"
