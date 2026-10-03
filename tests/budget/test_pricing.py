@@ -66,3 +66,5 @@ def test_pricing_refuses_wrong_provider_and_invalid_amounts() -> None:
         price_openai_usage(usage(Provider.TYPESAFE))
     with pytest.raises(ValueError, match="max_output_tokens"):
         reserve_openai_nusd(10, 0)
+    with pytest.raises(ValueError, match="confirmed Jev reservation envelope"):
+        reserve_jev_nusd(DEFAULT_PRICING, max_input_tokens=1)
