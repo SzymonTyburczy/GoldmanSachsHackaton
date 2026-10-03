@@ -38,6 +38,7 @@ from app.contracts import (
 from app.controls import access
 from app.controls.redaction import remove_fields
 from app.controls.semantic import build_jev_state, evaluate
+from app.policy import CONFIG_FILES, DEFAULT_CONFIG_DIR, Policy, read_config_file
 from app.pricing import DEFAULT_PRICING
 from app.provider_calls import assess_with_budget, summarize_with_budget
 from app.settings import Settings
@@ -151,7 +152,11 @@ def _local_benchmark(iterations: int) -> dict[str, Any]:
         "email": "synthetic@example.invalid",
         "secret": "SYNTHETIC-NOT-A-REAL-SECRET",
     }
-    allowed_fields = access.readable_fields(Role.ANALYST)
+    # Role fields come from the shipped policy since A4 (acl.<role>.fields).
+    shipped = read_config_file("policy", DEFAULT_CONFIG_DIR / CONFIG_FILES["policy"])
+    if not isinstance(shipped, Policy):
+        raise RuntimeError("config/policy.json is not a policy")
+    allowed_fields = shipped.fields_for(Role.ANALYST)
     access_allow_times: list[float] = []
     access_deny_times: list[float] = []
     field_filter_times: list[float] = []

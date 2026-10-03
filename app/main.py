@@ -20,7 +20,10 @@ from app.api import admin, health, v1
 from app.api.errors import ApiError, api_error_handler, validation_error_handler
 from app.auth import TokenDirectory
 from app.gateway import Gateway
+from app.pii.engine import SUPPORTED_LANGUAGES, PiiEngineUnavailable, get_engine
 from app.settings import Settings
+
+logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).with_name("static")
 
@@ -70,6 +73,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         # Fails startup on an unknown schema version instead of serving with it.
         db.init_db(settings.db_path)
+        # Load the spaCy pipelines now rather than on the first request. A failure is not
+        # fatal: requests needing redaction are refused until the engine can be built.
+        try:
+            get_engine(SUPPORTED_LANGUAGES)
+        except PiiEngineUnavailable:
+            logger.warning("PII engine unavailable; document requests will be refused")
         yield
 
     app = FastAPI(title="ControlProof", version="0.1.0", lifespan=lifespan, telemetry=TELEMETRY_OFF)

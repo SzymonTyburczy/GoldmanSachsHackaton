@@ -1,8 +1,9 @@
-"""Access control: client scope, task ownership and document owner.
+"""Access control: client scope, task ownership, tools and document owner.
 
-Every decision uses only server-side state: the authenticated principal, the stored task
-and the trusted document catalog. Nothing here opens document content, so a denial
-always happens before the document adapter runs.
+Every decision uses only server-side state: the authenticated principal, the stored task,
+the pinned policy and the trusted document catalog. Nothing here opens document content,
+so a denial always happens before the document adapter runs. Readable fields per role
+come from the policy (``acl``) and are applied by ``app.controls.redaction``.
 """
 
 from app.adapters.documents import CatalogEntry
@@ -15,19 +16,10 @@ from app.contracts import (
     RequestContext,
     Role,
     Stage,
+    Tool,
 )
+from app.policy import Policy
 from app.tasks import Task
-
-ANALYST_FIELDS = frozenset({"company_name", "status", "notes"})
-REVIEWER_FIELDS = ANALYST_FIELDS | {"review_note"}
-
-# Document fields each role may read (docs/WSPOLNE_USTALENIA.md, section 5). Anything
-# else, including email, personal_id and secret, is removed. A4 moves this to the policy.
-READABLE_FIELDS: dict[Role, frozenset[str]] = {
-    Role.ANALYST: ANALYST_FIELDS,
-    Role.REVIEWER: REVIEWER_FIELDS,
-    Role.ADMIN: REVIEWER_FIELDS,
-}
 
 
 def _result(decision: Decision, reason_code: ReasonCode, stage: Stage) -> ControlResult:
@@ -61,6 +53,14 @@ def can_view_task(principal: Principal, task: Task | None) -> bool:
     )
 
 
+def check_tool(policy: Policy, context: RequestContext, tool: Tool) -> ControlResult:
+    """The role's tools come from the pinned policy (``acl.<role>.tools``)."""
+    stage = Stage.ARTIFACT if tool is Tool.ARTIFACTS_ADMIT else Stage.PRE_DOCUMENT
+    if tool not in policy.tools_for(context.role):
+        return _result(Decision.DENY, ReasonCode.TOOL_FORBIDDEN, stage)
+    return _allow(stage)
+
+
 def check_document(context: RequestContext, document: CatalogEntry | None) -> ControlResult:
     """The document must be in the trusted catalog and belong to the task's client.
 
@@ -70,7 +70,3 @@ def check_document(context: RequestContext, document: CatalogEntry | None) -> Co
     if document is None or document.client_id != context.client_id:
         return _result(Decision.DENY, ReasonCode.CLIENT_FORBIDDEN, Stage.PRE_DOCUMENT)
     return _allow(Stage.PRE_DOCUMENT)
-
-
-def readable_fields(role: Role) -> frozenset[str]:
-    return READABLE_FIELDS[role]
