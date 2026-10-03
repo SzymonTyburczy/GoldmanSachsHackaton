@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "document_id": "doc-b",
+  "fields": {
+    "company_name": "Contoso Retail S.A.",
+    "status": "under_review",
+    "notes": "Fictional demo client B. Nothing from this document may reach a task of client A.",
+    "review_note": "Reviewer only: the sanctions screening result is still pending.",
+    "email": "treasury@contoso.example",
+    "personal_id": "07661509174",
+    "secret": "cpdemo_Qw5Er8Ty1Ui4Op7As0Df3Gh6"
+  }
+}

@@ -8,7 +8,7 @@ Obowiązują dla ludzi i używanych przez nich asystentów AI. Kolejność zada�
 
 | Właściciel | Planowane pliki / katalogi |
 |---|---|
-| Osoba 1 | `app/main.py`, `app/api/`, `app/gateway.py`, `app/auth.py`, `app/policy.py`, `app/audit.py`, `app/controls/access.py`, `app/controls/redaction.py`, `app/pii/`, `app/controls/artifacts.py`, `app/adapters/documents.py`, `app/static/` |
+| Osoba 1 | `app/main.py`, `app/api/`, `app/gateway.py`, `app/auth.py`, `app/policy.py`, `app/audit.py`, `app/controls/access.py`, `app/controls/redaction.py`, `app/pii/`, `app/controls/artifacts.py`, `app/adapters/documents.py`, `app/tasks.py`, `data/`, `app/static/` |
 | Osoba 2 | `app/controls/semantic.py`, `app/budget.py`, `app/adapters/openai_luna.py`, `app/adapters/jev.py`, `app/prompts/`, `tests/semantic/`, `tests/budget/`, `tests/live/`, `scripts/evaluate.py`, `scripts/benchmark.py` |
 | Wspólne; zapis koordynuje osoba 1 | `app/contracts.py`, `app/db.py`, `app/schema.sql`, `config/`, `pyproject.toml`, `uv.lock`, `Makefile`, README i dokumentacja |
 | Testy własnej części | Osoba 1: `tests/gateway/`, `tests/policy/`, `tests/data/`, `tests/audit/`. Osoba 2 scala wykonanie całego zestawu. |

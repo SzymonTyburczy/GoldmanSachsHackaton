@@ -17,18 +17,9 @@ def execute_body(**overrides: object) -> dict[str, object]:
     return body
 
 
-def post_execute(client: TestClient, body: object, idempotency_key: str | None = None):
-    headers = {"Idempotency-Key": idempotency_key or str(uuid4())}
-    return client.post("/v1/execute", json=body, headers=headers)
-
-
-def test_valid_execute_request_is_refused_until_the_gateway_exists(client: TestClient) -> None:
-    response = post_execute(client, execute_body())
-
-    assert response.status_code == 501
-    body = response.json()
-    assert body["reason_code"] == "NOT_IMPLEMENTED"
-    assert body["request_id"] == response.headers["X-Request-ID"]
+@pytest.fixture
+def analyst(headers: dict[str, dict[str, str]]) -> dict[str, str]:
+    return headers["analyst-a"] | {"Idempotency-Key": str(uuid4())}
 
 
 @pytest.mark.parametrize(
@@ -41,49 +32,45 @@ def test_valid_execute_request_is_refused_until_the_gateway_exists(client: TestC
     ],
 )
 def test_invalid_execute_request_returns_safe_422(
-    client: TestClient, overrides: dict[str, object], expected_type: str
+    client: TestClient,
+    analyst: dict[str, str],
+    overrides: dict[str, object],
+    expected_type: str,
 ) -> None:
-    response = post_execute(client, execute_body(**overrides))
+    response = client.post("/v1/execute", json=execute_body(**overrides), headers=analyst)
 
     assert response.status_code == 422
     body = response.json()
     assert body["reason_code"] == "INVALID_INPUT"
+    assert body["request_id"] == response.headers["X-Request-ID"]
     assert expected_type in [error["type"] for error in body["errors"]]
     assert set(body) == {"schema_version", "request_id", "reason_code", "errors"}
 
 
-def test_validation_error_does_not_echo_submitted_values(client: TestClient) -> None:
+def test_validation_error_does_not_echo_submitted_values(
+    client: TestClient, analyst: dict[str, str]
+) -> None:
     oversized = SECRET_SENTINEL + "x" * 8000
     body = execute_body(arguments={"document_id": "doc-a", "prompt": oversized})
 
-    response = post_execute(client, body)
+    response = client.post("/v1/execute", json=body, headers=analyst)
 
     assert response.status_code == 422
     assert SECRET_SENTINEL not in response.text
 
 
-def test_missing_idempotency_key_is_rejected(client: TestClient) -> None:
-    response = client.post("/v1/execute", json=execute_body())
+def test_missing_idempotency_key_is_rejected(
+    client: TestClient, headers: dict[str, dict[str, str]]
+) -> None:
+    response = client.post("/v1/execute", json=execute_body(), headers=headers["analyst-a"])
 
     assert response.status_code == 422
     assert response.json()["errors"][0]["loc"] == ["header", "Idempotency-Key"]
 
 
-def test_create_task_validates_body_before_refusing(client: TestClient) -> None:
-    valid = client.post("/v1/tasks", json={"schema_version": 1, "client_id": "client-a"})
-    forged = client.post(
-        "/v1/tasks",
-        json={"schema_version": 1, "client_id": "client-a", "principal_id": "admin"},
-    )
-
-    assert valid.status_code == 501
-    assert forged.status_code == 422
-
-
 @pytest.mark.parametrize(
     ("method", "path"),
     [
-        ("GET", f"/v1/tasks/{uuid4()}"),
         ("GET", "/admin/policy"),
         ("PUT", "/admin/policy"),
         ("GET", "/admin/feed"),
@@ -94,10 +81,10 @@ def test_create_task_validates_body_before_refusing(client: TestClient) -> None:
         ("GET", "/admin/test-results"),
     ],
 )
-def test_skeleton_routes_refuse_with_not_implemented(
-    client: TestClient, method: str, path: str
+def test_admin_skeleton_routes_refuse_with_not_implemented(
+    client: TestClient, headers: dict[str, dict[str, str]], method: str, path: str
 ) -> None:
-    response = client.request(method, path)
+    response = client.request(method, path, headers=headers["admin"])
 
     assert response.status_code == 501
     assert response.json()["reason_code"] == "NOT_IMPLEMENTED"

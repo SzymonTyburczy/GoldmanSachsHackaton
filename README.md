@@ -2,20 +2,22 @@
 
 Warstwa kontroli pomiędzy aplikacją/agentem a dokumentami i modelami AI. Sprawdza dostęp, usuwa wskazane dane wrażliwe, wykrywa podejrzane instrukcje, ogranicza zużycie i zapisuje wynik każdej operacji.
 
-**Stan na 3.10.2026:** ukończony krok A1, czyli szkielet aplikacji. Działają `GET /health`, wspólne kontrakty, schemat SQLite i panel ze stanem serwera. Pozostałe endpointy walidują wejście i odpowiadają `501 NOT_IMPLEMENTED`; żadna kontrola ani adapter jeszcze nie działa. Plan dotyczy **dwóch osób**.
+**Stan na 3.10.2026:** ukończone kroki A1 (szkielet) i A2 (tożsamość, zadania i dostęp do dokumentów). Działają: `GET /health`, uwierzytelnienie trzema tokenami demo, tworzenie i odczyt zadań oraz `documents.read` z kontrolą klienta przed odczytem treści i usuwaniem pól według roli. Podsumowanie, artefakty i endpointy admina odpowiadają `501 NOT_IMPLEMENTED`. Audyt, polityka, Presidio, Jev, Luna i budżet jeszcze nie działają. Plan dotyczy **dwóch osób**.
 
 ## Uruchomienie
 
 Wymagane: [uv](https://docs.astral.sh/uv/) i dostęp do internetu przy pierwszej instalacji. uv pobiera Pythona 3.12, pakiety i modele spaCy według `uv.lock`.
 
 ```bash
-make setup   # uv sync --locked, .env z .env.example (jeśli brak), lokalna baza
+make setup   # uv sync --locked, .env z .env.example (jeśli brak), puste tokeny demo, lokalna baza
 make dev     # API i panel: http://127.0.0.1:8000
 make check   # Ruff
 make test    # testy offline; sieć do TypeSafe i OpenAI jest zablokowana
 ```
 
 `make test-live`, `make verify`, `make benchmark`, `make reload-config` i `make reset-demo` jeszcze nie istnieją. Kończą się błędem, żeby nie udawały udanej weryfikacji.
+
+API wymaga nagłówka `Authorization: Bearer <token>` z `.env`: `CONTROLPROOF_TOKEN_ANALYST_A`, `CONTROLPROOF_TOKEN_REVIEWER_A` lub `CONTROLPROOF_TOKEN_ADMIN`. Tokenu nie podaje się w URL. `POST /v1/execute` wymaga aktywnej polityki i feedu. Ich import powstaje w A4, więc do tego czasu odpowiada `503 INVALID_CONFIG`; przepływ dokumentów sprawdzają testy w `tests/gateway/`.
 
 ## Czytaj w tej kolejności
 
