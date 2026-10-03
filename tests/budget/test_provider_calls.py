@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,7 +13,7 @@ import pytest
 
 from app import db
 from app.adapters.openai_luna import OpenAILunaAdapter, SummaryResult, TokenCount
-from app.budget import BudgetLimits, balances, get_reservation
+from app.budget import BudgetExceeded, BudgetLimits, balances, get_reservation
 from app.contracts import (
     BudgetUnit,
     CostStatus,
@@ -141,9 +141,12 @@ class FakeLuna:
         self.count_calls = 0
         self.summary_calls = 0
         self.summary_max_output_tokens: int | None = None
+        self.during_count: Callable[[], None] | None = None
 
     async def count_input_tokens(self, *, input: str) -> TokenCount:
         self.count_calls += 1
+        if self.during_count is not None:
+            self.during_count()
         if self.count_error:
             raise self.count_error
         return TokenCount(
@@ -309,6 +312,47 @@ async def test_luna_reserves_and_sends_same_cap_when_adapter_default_differs(
     assert client.responses.create_args is not None
     assert client.responses.create_args["max_output_tokens"] == cap_used_for_reservation
     assert client.responses.create_args["max_output_tokens"] != 64
+
+
+@pytest.mark.asyncio
+async def test_luna_rejects_generation_when_policy_changes_during_count(db_path: Path) -> None:
+    context = _setup(db_path)
+    with closing(db.connect(db_path)) as conn, db.transaction(conn):
+        for version in (1, 2):
+            conn.execute(
+                """INSERT INTO config_versions
+                   (kind, version, body, sha256, created_at, created_by)
+                   VALUES ('policy', ?, '{}', ?, ?, 'test')""",
+                (version, "0" * 64, NOW),
+            )
+        conn.execute(
+            "INSERT INTO active_config (kind, version, activated_at) VALUES ('policy', 1, ?)",
+            (NOW,),
+        )
+    adapter = FakeLuna()
+
+    def lower_active_policy() -> None:
+        with closing(db.connect(db_path)) as conn, db.transaction(conn):
+            conn.execute("UPDATE active_config SET version = 2 WHERE kind = 'policy'")
+
+    adapter.during_count = lower_active_policy
+    with pytest.raises(BudgetExceeded, match="active policy changed"):
+        await summarize_with_budget(
+            db_path=db_path,
+            context=context,
+            adapter=adapter,  # type: ignore[arg-type]
+            input="synthetic",
+            limits=_limits(),
+            pricing=DEFAULT_PRICING,
+            max_input_tokens=8192,
+            max_output_tokens=128,
+        )
+
+    assert adapter.count_calls == 1
+    assert adapter.summary_calls == 0
+    assert balances(db_path, unit=BudgetUnit.NUSD, task_id=TASK_ID, principal_id=PRINCIPAL)[
+        "global"
+    ] == {"spent": 0, "reserved": 0}
 
 
 @pytest.mark.asyncio

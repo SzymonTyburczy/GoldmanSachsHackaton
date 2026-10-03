@@ -11,6 +11,8 @@ from app.contracts import CostStatus, Provider, Usage
 
 OPENAI_PRICING_SOURCE = "https://developers.openai.com/api/docs/pricing"
 TYPESAFE_PRICING_SOURCE = "https://docs.typesafe.ai/models"
+# Confirmed supported input envelope for the configured Jev adapter/model.
+JEV_MIN_RESERVED_INPUT_TOKENS = 65_536
 
 
 @dataclass(frozen=True)
@@ -77,6 +79,8 @@ def reserve_jev_nusd(
 ) -> int:
     """Conservative maximum for Jev's one-input, two-question request."""
     _positive_int(max_input_tokens, "max_input_tokens")
+    if max_input_tokens < JEV_MIN_RESERVED_INPUT_TOKENS:
+        raise ValueError("max_input_tokens is below the confirmed Jev reservation envelope")
     return max_input_tokens * pricing.typesafe_input_nusd_per_token
 
 

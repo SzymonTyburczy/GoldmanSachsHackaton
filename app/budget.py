@@ -116,6 +116,17 @@ def reserve(
 
     with closing(db.connect(db_path)) as conn, _write_transaction(conn):
         _validate_request_context(conn, context, limits)
+        if unit is BudgetUnit.NUSD:
+            active_policy = conn.execute(
+                "SELECT version FROM active_config WHERE kind = 'policy'"
+            ).fetchone()
+            if active_policy is not None and active_policy["version"] != limits.limit_version:
+                # A policy update won the race while a provider operation was waiting.
+                # Refuse before reserving/sending with stale limits; the gateway will
+                # surface a fail-closed budget denial.
+                raise BudgetExceeded(
+                    ReasonCode.BUDGET_EXCEEDED, "active policy changed before reservation"
+                )
         _validate_quotas(conn, context, purpose, limits)
         for scope in scopes:
             conn.execute(
