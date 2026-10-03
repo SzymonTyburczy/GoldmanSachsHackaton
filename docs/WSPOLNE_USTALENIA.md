@@ -193,6 +193,18 @@ MVP używa trzech losowych tokenów demo z `.env`, mapowanych na tożsamości po
 
 Do Jev i OpenAI dopuszczamy wyłącznie pola `company_name`, `status`, `notes` i oczyszczony prompt; `review_note` pozostaje poza wysyłką do dostawcy. Dotyczy to także endpointu liczenia tokenów. Wszystkie dane demonstracyjne są fikcyjne.
 
+### Doprecyzowania z A2 — do potwierdzenia przez osobę 2
+
+- **Tokeny.** Katalog tożsamości jest w `app/auth.py`: `analyst-a` (rola `analyst`), `reviewer-a` (`reviewer`) i `admin` (`admin`). Wszystkie trzy mają klienta `client-a` i `agent_id=demo-agent`. Token jest przyjmowany wyłącznie z nagłówka `Authorization: Bearer`. Token za krótki (poniżej 32 lub powyżej 256 znaków), z innymi znakami niż RFC 6750 albo powtórzony dla dwóch tożsamości zatrzymuje start. Brak tokenu wyłącza tylko daną tożsamość. `make setup` wpisuje losowe tokeny w puste zmienne `.env` i nie nadpisuje istniejących wartości.
+- **Kody `401` i `403`.** Bez poprawnego tokenu każdy endpoint poza `/health` i panelem zwraca `401 AUTH_REQUIRED` z nagłówkiem `WWW-Authenticate: Bearer`. Uwierzytelnienie poprzedza walidację schematu. Nowy kod `ADMIN_REQUIRED` (`403`) oznacza zalogowanego użytkownika bez roli admina na `/admin/*`. Wymaganie roli jest ustawione dla całego routera, więc obejmuje także przyszłe trasy.
+- **Zadania.** `POST /v1/tasks` zwraca `201` z `TaskResponse` (`schema_version`, `task_id`, `principal_id`, `agent_id`, `client_id`, `created_at`). Klient spoza zakresu tożsamości, w tym nieistniejący, daje `403 CLIENT_FORBIDDEN`. `GET /v1/tasks/{id}` jest dostępny dla właściciela i admina. Nieznane i cudze zadanie dają ten sam `403 TASK_FORBIDDEN`. `POST /v1/execute` wykonuje wyłącznie właściciel zadania, także gdy jest nim admin.
+- **Konfiguracja.** `POST /v1/execute` przypina aktywne wersje polityki i feedu. Bez obu kończy się `503 INVALID_CONFIG`, zanim zadziała jakikolwiek adapter. Do A4 nie ma importu konfiguracji, dlatego przez `make dev` ścieżka dokumentu nie działa; testy aktywują wersje zastępcze.
+- **Dostęp do dokumentu.** Kontrola dostępu sprawdza katalog `data/documents/catalog.json` i nie otwiera treści. Dokument nieznany i dokument innego klienta dają ten sam wynik: `200`, `DENY`, `CLIENT_FORBIDDEN`, etap `pre_document`, wszystkie adaptery `NOT_CALLED`. Dotyczy to też `documents.summarize`.
+- **Pola według roli.** Po odczycie zostają tylko pola z listy dozwolonych dla roli, zgodnie z tabelą powyżej (`READABLE_FIELDS` w `app/controls/access.py`). Pozostałe pola trafiają z nazwy do `redacted_fields`, a wynik ma `REDACT` i `PII_REDACTED`. W A4 ta lista przechodzi do polityki (`acl`).
+- **Błąd adaptera.** Nieczytelny lub niezgodny plik dokumentu daje `DENY` z `UPSTREAM_FAILED`, `execution_status=FAILED` i `document_read=FAILED`, bez treści. `DocumentAdapter.reads` liczy każde wywołanie, także nieudane.
+- **Niezbudowane kroki.** `documents.summarize` po dozwolonym dostępie oraz `artifacts.admit` zwracają `501 NOT_IMPLEMENTED` do A5 i A6, bez odczytu treści. Nagłówek `Idempotency-Key` jest wymagany, ale jeszcze nie jest zapisywany.
+- **Logi i czas w bazie.** Access log Uvicorna zapisuje ścieżkę bez query stringu, bo token wysłany przez pomyłkę w URL nie może trafić do logów. Czas w bazie zapisuje `db.to_db_time()` w formacie `YYYY-MM-DDTHH:MM:SS.ffffffZ`.
+
 ## 6. Jedna polityka, jeden feed
 
 Minimalna zawartość polityki, do zapisania w JSON podczas A4:
@@ -302,7 +314,7 @@ Każda kontrola ma test wykrywający jej wyłączenie w kopii testowej. Zestaw A
 | `make reload-config` | Zweryfikowany import plików polityki/feedu przez wspólną ścieżkę aktywacji |
 | `make reset-demo` | Reset wyłącznie syntetycznych zadań i lokalnej bazy demo, po świadomym wywołaniu przez operatora |
 
-Po A1 działają `make setup`, `make dev`, `make check` i `make test`. Pozostałe komendy kończą się błędem do czasu implementacji. README otrzyma sprawdzone instrukcje podczas A7/B6. Reset nie resetuje rzeczywistego rachunku dostawcy. Każdy raport podaje datę, model, konfigurację, commit, liczebność, błędy i zakres; offline oraz live są widoczne osobno.
+Po A1 działają `make setup`, `make dev`, `make check` i `make test`; od A2 `make setup` uzupełnia także puste tokeny demo. Pozostałe komendy kończą się błędem do czasu implementacji. README otrzyma sprawdzone instrukcje podczas A7/B6. Reset nie resetuje rzeczywistego rachunku dostawcy. Każdy raport podaje datę, model, konfigurację, commit, liczebność, błędy i zakres; offline oraz live są widoczne osobno.
 
 ## 10. Warunki ukończenia
 

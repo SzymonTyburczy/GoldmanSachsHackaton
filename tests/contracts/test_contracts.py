@@ -30,6 +30,7 @@ from app.contracts import (
     SemanticResult,
     Stage,
     SummaryOutput,
+    TaskResponse,
     Usage,
 )
 
@@ -367,3 +368,34 @@ def test_audit_event_round_trips_through_json() -> None:
     restored = AuditEvent.model_validate_json(event.model_dump_json())
     assert restored == event
     assert restored.model_dump(mode="json")["schema_version"] == 1
+
+
+class TestTaskResponse:
+    def fields(self, **overrides: object) -> dict[str, object]:
+        fields: dict[str, object] = {
+            "task_id": uuid4(),
+            "principal_id": "analyst-a",
+            "agent_id": "demo-agent",
+            "client_id": "client-a",
+            "created_at": datetime(2026, 10, 3, 16, 0, tzinfo=UTC),
+        }
+        fields.update(overrides)
+        return fields
+
+    def test_serialises_with_schema_version_and_utc_time(self) -> None:
+        body = TaskResponse(**self.fields()).model_dump(mode="json")
+
+        assert body["schema_version"] == 1
+        assert body["created_at"] == "2026-10-03T16:00:00Z"
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"created_at": datetime(2026, 10, 3, 16, 0)},
+            {"role": "admin"},
+            {"principal_id": "Admin User"},
+        ],
+    )
+    def test_rejects_invalid_task(self, overrides: dict[str, object]) -> None:
+        with pytest.raises(ValidationError):
+            TaskResponse(**self.fields(**overrides))

@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "documents": [
+    { "document_id": "doc-a", "client_id": "client-a" },
+    { "document_id": "doc-b", "client_id": "client-b" }
+  ]
+}

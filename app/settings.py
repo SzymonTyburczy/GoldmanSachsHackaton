@@ -11,12 +11,15 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, SecretStr
 
 DEFAULT_DB_PATH = Path("var/controlproof.sqlite3")
+# Synthetic demo documents and their trusted owner catalog, shipped with the code.
+DEFAULT_DOCUMENTS_DIR = Path(__file__).resolve().parent.parent / "data" / "documents"
 
 
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     db_path: Path = DEFAULT_DB_PATH
+    documents_dir: Path = DEFAULT_DOCUMENTS_DIR
     # Demo identities (A2): random bearer tokens mapped to identities on the server.
     token_analyst_a: SecretStr | None = None
     token_reviewer_a: SecretStr | None = None
