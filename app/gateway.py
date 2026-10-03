@@ -218,7 +218,7 @@ class Gateway:
         )
         match claim:
             case idempotency.Replay(response):
-                return response
+                return self._replay(trail, context, pinned, feed, response)
             case idempotency.Pending():
                 raise ApiError(409, ReasonCode.REQUEST_PENDING)
             case idempotency.Conflict():
@@ -238,6 +238,43 @@ class Gateway:
             self._abandon(context, trail)
             raise
         return context, pinned, feed
+
+    def _replay(
+        self,
+        trail: RequestTrail,
+        context: RequestContext,
+        pinned: Policy,
+        feed: Feed,
+        response: ExecuteResponse,
+    ) -> ExecuteResponse:
+        """The stored response of a repeated key, if the caller may still have it.
+
+        A stored denial is returned as is. Otherwise the current policy must still allow
+        the tool and the data (``access.check_replay``), and an admitted artifact must not
+        have been blocked by the feed since. A refusal is audited but not stored, so the
+        same key returns the stored response again once the rights are back.
+        """
+        if response.decision is Decision.DENY:
+            return response
+        stored: Policy | None = pinned
+        if response.policy_version != context.policy_version:
+            with closing(db.connect(self._db_path)) as conn:
+                try:
+                    document = policy.load(conn, "policy", response.policy_version).document
+                except policy.StoredConfigError:
+                    document = None
+            stored = document if isinstance(document, Policy) else None
+        result = access.check_replay(pinned, stored, context, trail.tool)
+        if (
+            result.decision is Decision.ALLOW
+            and isinstance(response.output, ArtifactAdmitOutput)
+            and any(rule.value == response.output.sha256 for rule in feed.rules)
+        ):
+            result = artifacts.blocked()
+        if result.decision is Decision.DENY:
+            trail.record(result)
+            return _denied(context, trail, result.reason_code)
+        return response
 
     async def _run(
         self,

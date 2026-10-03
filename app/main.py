@@ -19,6 +19,7 @@ from app.adapters.artifacts import ArtifactManifest, ArtifactStore
 from app.adapters.documents import DocumentAdapter, DocumentCatalog
 from app.adapters.providers import Providers
 from app.api import admin, health, v1
+from app.api.body_limit import BodySizeLimit, BodyTooLarge, body_too_large_handler
 from app.api.errors import ApiError, api_error_handler, validation_error_handler
 from app.auth import TokenDirectory
 from app.gateway import Gateway
@@ -102,6 +103,10 @@ def create_app(settings: Settings | None = None, providers: Providers | None = N
         settings, catalog, app.state.documents, manifest, app.state.artifacts, providers
     )
 
+    # Added before request_context, so it runs inside it and its 413 gets the request ID
+    # and the security headers.
+    app.add_middleware(BodySizeLimit)
+
     @app.middleware("http")
     async def request_context(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -119,6 +124,7 @@ def create_app(settings: Settings | None = None, providers: Providers | None = N
 
     app.add_exception_handler(ApiError, api_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
+    app.add_exception_handler(BodyTooLarge, body_too_large_handler)
 
     app.include_router(health.router)
     app.include_router(v1.router)
