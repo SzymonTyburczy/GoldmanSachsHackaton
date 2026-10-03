@@ -11,7 +11,7 @@ adapter call is the intent record: if it cannot be stored, the adapter is not ca
 
 import logging
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import closing
 from pathlib import Path
 from typing import Literal
@@ -151,6 +151,7 @@ class RequestTrail:
         *,
         starting: AdapterName | None = None,
         latency_ms: int | None = None,
+        entity_counts: Mapping[str, int] | None = None,
     ) -> None:
         """Store the outcome of one step.
 
@@ -181,6 +182,7 @@ class RequestTrail:
             policy_version=self.policy_version,
             feed_version=self.feed_version,
             redacted_fields=result.redacted_fields,
+            redacted_entity_counts=dict(entity_counts or {}),
         )
         append(self._db_path, event)
         self.calls = calls

@@ -67,6 +67,18 @@ Najpierw usuwamy pola zabronione dla roli i dostawcy; potem Analyzer wskazuje fr
 
 Konfiguracja `redaction` zawiera encje, progi per encja, placeholdery, języki i wersję recognizerów. Awaria silnika lub brak wymaganego modelu blokuje ścieżkę wychodzącą, zamiast przesyłać surowy tekst. Audyt zapisuje typy encji/liczby i wersję konfiguracji, bez wykrytych wartości. Te same reguły stosujemy do promptu, dokumentu i odpowiedzi Luny przed udostępnieniem jej użytkownikowi.
 
+### Doprecyzowania z A4: redakcja — do potwierdzenia przez Pawła
+
+- **Silnik.** `app/pii/engine.py` buduje jeden Analyzer na zestaw języków, z recognizerami `EMAIL_ADDRESS`, `PHONE_NUMBER` (regiony PL, US, GB, DE, FR), `IBAN_CODE`, `CREDIT_CARD` i `PL_PESEL` zarejestrowanymi dla `en` i `pl`. Przed budową sprawdza `spacy.util.is_package` dla `en_core_web_sm` i `pl_core_news_sm`, bo Presidio przy braku modelu uruchamia jego pobieranie (`pip` w podprocesie). E-mail jest sprawdzany lokalnie: domena musi kończyć się literami (co najmniej 2). Domyślny recognizer używa `tldextract`, który może pobierać listę domen z internetu i odrzuca domeny `.example` i `.test`. Zestaw recognizerów i reguł sekretów ma wersję `controlproof-pii-1`, zapisaną w polityce.
+- **Analiza i scalanie.** Każdy tekst jest analizowany w każdym języku z polityki. Wyniki poniżej progu encji odpadają. Nakładające się wyniki, także z różnych języków, łączą się w jeden fragment obejmujący je wszystkie, z typem wyniku o najwyższym score (remis: kolejność `EMAIL_ADDRESS`, `PHONE_NUMBER`, `IBAN_CODE`, `CREDIT_CARD`, `PL_PESEL`). Anonymizer zastępuje te fragmenty placeholderami w tym samym tekście.
+- **Reguła sekretów.** `app/pii/secrets.py` działa przed Presidio i niezależnie od niego. Rozpoznaje `cpdemo_…`, klucze w stylu OpenAI (`sk-…`), AWS (`AKIA…`), GitHub (`gh?_…`), `Bearer …` i klucze PEM. Liczy je jako typ `SECRET`.
+- **Logi.** Loggery `presidio-analyzer` i `presidio-anonymizer` są wyłączone, bo na poziomie DEBUG zapisują fragmenty analizowanego tekstu. Wykrył to test braku treści w logach.
+- **Wyjście `documents.read`.** Kolejno: pola roli, reguła sekretów, Presidio. Decyzja `REDACT` z `PII_REDACTED` zapada, gdy usunięto pole albo zastąpiono fragment. Zdarzenie audytu ma `redacted_entity_counts`, np. `{"EMAIL_ADDRESS": 1, "SECRET": 1}`.
+- **Awaria silnika.** Silnik niedostępny przed odczytem: `200 DENY PII_ENGINE_UNAVAILABLE`, etap `pre_document`, bez odczytu. Awaria w trakcie redakcji po odczycie: `DENY PII_ENGINE_UNAVAILABLE` z `execution_status=SUCCEEDED` i `output=null`.
+- **Dane dla dostawców.** `redaction.prepare_provider_input` zwraca `ProviderInput`: pola z przecięcia zakresu roli i `outbound_fields`, po redakcji, oraz oczyszczony prompt. A5 przekazuje adapterom wyłącznie `ProviderInput.detector_state(trusted_task)` (Jev, przez `build_jev_state`) i `ProviderInput.summary_input()` (liczenie tokenów i Luna). Test podstawia adapterom Pawła klienta `httpx.MockTransport` i sprawdza treść żądań do `/v1/systemone`, `/v1/responses/input_tokens` i `/v1/responses`.
+- **Dane demo.** `notes` w `doc-a` zawiera syntetyczny e-mail, telefon i sekret, a `review_note` – IBAN. Dzięki temu maskowanie widać w polach dostępnych dla ról.
+- **Ograniczenie.** Recognizer telefonu daje score 0,4 każdej jedenastocyfrowej liczbie, więc np. numery zamówień też mogą zostać zamaskowane. Wolimy nadmiarowe maskowanie niż wyciek.
+
 ## 3. Architektura i kolejność kontroli
 
 ```mermaid
@@ -147,7 +159,7 @@ Wynik API zawiera `schema_version`, `request_id`, `task_id`, `decision`, `reason
 
 Minimalne kody: `OK`, `AUTH_REQUIRED`, `INVALID_INPUT`, `TASK_FORBIDDEN`, `CLIENT_FORBIDDEN`, `MODEL_FORBIDDEN`, `TOOL_FORBIDDEN`, `PII_REDACTED`, `SEMANTIC_RISK`, `DETECTOR_UNAVAILABLE`, `PII_ENGINE_UNAVAILABLE`, `BUDGET_EXCEEDED`, `CONCURRENCY_EXCEEDED`, `INPUT_TOO_LARGE`, `TOKEN_COUNT_UNAVAILABLE`, `ARTIFACT_BLOCKED`, `INVALID_CONFIG`, `UPSTREAM_FAILED`, `UPSTREAM_TIMEOUT`, `AUDIT_UNAVAILABLE`.
 
-### Doprecyzowania z A1 — do potwierdzenia przez osobę 2
+### Doprecyzowania z A1 — do potwierdzenia przez Pawła
 
 Kod w `app/contracts.py` doprecyzowuje tabelę powyżej. Zmiana tych ustaleń jest zmianą kontraktu.
 
@@ -194,14 +206,14 @@ MVP używa trzech losowych tokenów demo z `.env`, mapowanych na tożsamości po
 
 Do Jev i OpenAI dopuszczamy wyłącznie pola `company_name`, `status`, `notes` i oczyszczony prompt; `review_note` pozostaje poza wysyłką do dostawcy. Dotyczy to także endpointu liczenia tokenów. Wszystkie dane demonstracyjne są fikcyjne.
 
-### Doprecyzowania z A2 — do potwierdzenia przez osobę 2
+### Doprecyzowania z A2 — do potwierdzenia przez Pawła
 
 - **Tokeny.** Katalog tożsamości jest w `app/auth.py`: `analyst-a` (rola `analyst`), `reviewer-a` (`reviewer`) i `admin` (`admin`). Wszystkie trzy mają klienta `client-a` i `agent_id=demo-agent`. Token jest przyjmowany wyłącznie z nagłówka `Authorization: Bearer`. Token za krótki (poniżej 32 lub powyżej 256 znaków), z innymi znakami niż RFC 6750 albo powtórzony dla dwóch tożsamości zatrzymuje start. Brak tokenu wyłącza tylko daną tożsamość. `make setup` wpisuje losowe tokeny w puste zmienne `.env` i nie nadpisuje istniejących wartości.
 - **Kody `401` i `403`.** Bez poprawnego tokenu każdy endpoint poza `/health` i panelem zwraca `401 AUTH_REQUIRED` z nagłówkiem `WWW-Authenticate: Bearer`. Uwierzytelnienie poprzedza walidację schematu. Nowy kod `ADMIN_REQUIRED` (`403`) oznacza zalogowanego użytkownika bez roli admina na `/admin/*`. Wymaganie roli jest ustawione dla całego routera, więc obejmuje także przyszłe trasy.
 - **Zadania.** `POST /v1/tasks` zwraca `201` z `TaskResponse` (`schema_version`, `task_id`, `principal_id`, `agent_id`, `client_id`, `created_at`). Klient spoza zakresu tożsamości, w tym nieistniejący, daje `403 CLIENT_FORBIDDEN`. `GET /v1/tasks/{id}` jest dostępny dla właściciela i admina. Nieznane i cudze zadanie dają ten sam `403 TASK_FORBIDDEN`. `POST /v1/execute` wykonuje wyłącznie właściciel zadania, także gdy jest nim admin.
-- **Konfiguracja.** `POST /v1/execute` przypina aktywne wersje polityki i feedu. Bez obu kończy się `503 INVALID_CONFIG`, zanim zadziała jakikolwiek adapter. Do A4 nie ma importu konfiguracji, dlatego przez `make dev` ścieżka dokumentu nie działa; testy aktywują wersje zastępcze.
+- **Konfiguracja.** `POST /v1/execute` przypina aktywne wersje polityki i feedu. Bez obu kończy się `503 INVALID_CONFIG`, zanim zadziała jakikolwiek adapter. Od A4 `make setup` importuje pliki z `config/` (doprecyzowania w sekcji 6).
 - **Dostęp do dokumentu.** Kontrola dostępu sprawdza katalog `data/documents/catalog.json` i nie otwiera treści. Dokument nieznany i dokument innego klienta dają ten sam wynik: `200`, `DENY`, `CLIENT_FORBIDDEN`, etap `pre_document`, wszystkie adaptery `NOT_CALLED`. Dotyczy to też `documents.summarize`.
-- **Pola według roli.** Po odczycie zostają tylko pola z listy dozwolonych dla roli, zgodnie z tabelą powyżej (`READABLE_FIELDS` w `app/controls/access.py`). Pozostałe pola trafiają z nazwy do `redacted_fields`, a wynik ma `REDACT` i `PII_REDACTED`. W A4 ta lista przechodzi do polityki (`acl`).
+- **Pola według roli.** Po odczycie zostają tylko pola z listy dozwolonych dla roli, zgodnie z tabelą powyżej; od A4 lista pochodzi z polityki (`acl.<rola>.fields`). Pozostałe pola trafiają z nazwy do `redacted_fields`, a wynik ma `REDACT` i `PII_REDACTED`.
 - **Błąd adaptera.** Nieczytelny lub niezgodny plik dokumentu daje `DENY` z `UPSTREAM_FAILED`, `execution_status=FAILED` i `document_read=FAILED`, bez treści. `DocumentAdapter.reads` liczy każde wywołanie, także nieudane.
 - **Niezbudowane kroki.** `documents.summarize` po dozwolonym dostępie oraz `artifacts.admit` zwracają `501 NOT_IMPLEMENTED` do A5 i A6, bez odczytu treści. Nagłówek `Idempotency-Key` jest wymagany, ale jeszcze nie jest zapisywany.
 - **Logi i czas w bazie.** Access log Uvicorna zapisuje ścieżkę bez query stringu, bo token wysłany przez pomyłkę w URL nie może trafić do logów. Czas w bazie zapisuje `db.to_db_time()` w formacie `YYYY-MM-DDTHH:MM:SS.ffffffZ`.
@@ -245,6 +257,30 @@ Aktualizacja wysyła `expected_version` i pełną konfigurację. Serwer waliduje
 Feed: `schema_version`, `feed_version`, `rules[]`; każda reguła ma `rule_id`, `kind=sha256`, `value`, `source`, `reason`, `is_test_fixture`. Walidujemy długość/format hashy i maks. 1000 reguł; bez skryptów czy wyrażeń wykonywalnych. Źródłem jest odrębny plik admina, imitujący zewnętrzne zarządzanie blokadami.
 
 `artifacts.admit` przyjmuje ID z katalogu serwera. Serwer czyta maks. 64 KiB, liczy SHA-256, sprawdza manifest i feed, parsuje tylko JSON zgodny ze schematem. Sprawdza i używa tych samych bajtów. Nie deserializuje pickle, nie uruchamia kodu, nie pobiera malware. Test dopisuje hash bezpiecznego artefaktu do feedu i wykazuje blokadę przed jego użyciem. W README testu należy wskazać źródło historycznej klasy zagrożenia; ten test nie odtwarza pełnego ataku na łańcuch dostaw.
+
+### Doprecyzowania z A4: polityka — do potwierdzenia przez Pawła
+
+- **Plik i model.** `config/policy.json` waliduje model `Policy` w `app/policy.py`. Plik nie zawiera `policy_version`, bo numer nadaje serwer. Pola ponad tabelę powyżej:
+  - `controls.access`, `redaction` i `budget` muszą mieć wartość `true`. `semantic` i `artifacts` mają egzekwować A5 i A6; do tego czasu ich ścieżki odpowiadają `501`.
+  - `models.allowed` może zawierać tylko `jev-1.13.0` i `gpt-6-luna`. Detektor musi być modelem TypeSafe, a podsumowanie modelem OpenAI. `summary_reasoning_effort` ma tylko wartość `low`, bo tak wysyła adapter.
+  - `acl.<analyst|reviewer|admin>` ma `tools` i `fields`. `outbound_fields` to pola, które mogą trafić do dostawcy.
+  - `email`, `personal_id` i `secret` nie mogą znaleźć się ani w `acl`, ani w `outbound_fields`.
+- **Redakcja w polityce.** `redaction` wymaga:
+  - `engine=presidio` i `recognizers_version=controlproof-pii-1`;
+  - `languages` z zakresu `en`/`pl`;
+  - wszystkich pięciu encji z `threshold` i `placeholder` w postaci `<WIELKIE_LITERY>` oraz `secret_placeholder`.
+- **Ceny.** `pricing` ma pola `PricingTable` z `app/pricing.py` oraz `verified_on`, `mode=standard` i `source_urls` (tylko https). Modele w cenniku muszą zgadzać się z `models`.
+- **Obiekty dla A5.** `Policy.budget_limits(policy_version)` daje `BudgetLimits` z `limit_version = policy_version`. `Policy.pricing.table()` daje `PricingTable`. Wartości w repo odpowiadają `DEFAULT_PRICING` Pawła.
+- **Narzędzia.** Domyślnie `artifacts.admit` ma tylko admin. Narzędzie spoza `acl.<rola>.tools` daje `200 DENY TOOL_FORBIDDEN` (etap `pre_document`, dla artefaktów `artifact`) przed silnikiem PII i katalogiem.
+- **API.** `GET /admin/policy` zwraca `ActivePolicy`: `schema_version`, `policy_version`, `sha256`, `created_at`, `created_by` i `policy`; bez aktywnej polityki odpowiada `503 INVALID_CONFIG`. `PUT /admin/policy` przyjmuje `{schema_version, expected_version, policy}`; `expected_version=null` działa tylko wtedy, gdy nic nie jest aktywne. Odpowiedzi:
+  - niepoprawna polityka: `422 INVALID_INPUT`, bez zapisu;
+  - nieaktualny `expected_version`: `409` z nowym kodem `VERSION_CONFLICT`.
+
+  W obu przypadkach aktywna wersja zostaje.
+- **Zapis.** Wersja jest zapisywana jako kanoniczny JSON (posortowane klucze) z SHA-256. Przy odczycie serwer sprawdza skrót i ponownie waliduje treść. Zmieniona lub niezgodna z kodem wersja daje `503 INVALID_CONFIG`, a `/health` pokazuje wtedy `protected_operations=disabled`.
+- **Jedna wersja na żądanie.** Żądanie ładuje politykę przypiętą przy przyjęciu i używa jej do końca. Test zmienia politykę w trakcie odczytu dokumentu; odpowiedź i zdarzenia mają starą wersję, a dopiero następne żądanie nową.
+- **Import z plików.** `make setup` uruchamia `python -m app.policy seed`, który importuje tylko rodzaje bez aktywnej wersji. `make reload-config` (`python -m app.policy reload`) najpierw waliduje oba pliki, a potem aktywuje te, których treść się zmieniła. Błąd w którymkolwiek pliku nie aktywuje niczego. Serwer nie czyta plików `config/` podczas pracy.
+- **Feed.** Model `Feed`/`FeedRule` też jest w `app/policy.py`; `config/threat-feed.json` startuje z pustą listą `rules`. `source` i `reason` dopuszczają tylko krótki tekst bez znaków specjalnych. `GET/PUT /admin/feed` i użycie reguł pozostają w A6.
 
 ## 7. Rezerwacje, rozliczanie i błędy
 
@@ -290,7 +326,7 @@ Panel pokazuje aktywne i wyłączone kontrole, wersję konfiguracji/feedu, ostat
 
 Eksport JSONL pochodzi z tych samych `audit_events`. Nie wymyślamy procentowego „poziomu bezpieczeństwa” ani „zaoszczędzonych pieniędzy”. Przełączniki bez kontroli backendowej nie są zabezpieczeniami.
 
-### Doprecyzowania z A3 — do potwierdzenia przez osobę 2
+### Doprecyzowania z A3 — do potwierdzenia przez Pawła
 
 - **Zdarzenia.** Gateway zapisuje `AuditEvent` po każdym kroku (`RequestTrail` w `app/audit.py`). Każde zdarzenie ma `event_id`, `request_id` (ten sam co nagłówek `X-Request-ID`), kontrolę, etap, decyzję, kod, wersje polityki/feedu i stan `adapter_calls` z chwili zapisu. Odmowa po odczycie pokazuje więc ten odczyt. Odpowiedź `POST /v1/execute` podaje identyfikatory zdarzeń w `audit_event_ids`.
 - **Kroki `documents.read`.** Zdarzenia w kolejności zapisu:
@@ -335,7 +371,7 @@ Każda kontrola ma test wykrywający jej wyłączenie w kopii testowej. Zestaw A
 | `make reload-config` | Zweryfikowany import plików polityki/feedu przez wspólną ścieżkę aktywacji |
 | `make reset-demo` | Reset wyłącznie syntetycznych zadań i lokalnej bazy demo, po świadomym wywołaniu przez operatora |
 
-Po A1 działają `make setup`, `make dev`, `make check` i `make test`; od A2 `make setup` uzupełnia także puste tokeny demo. Pozostałe komendy kończą się błędem do czasu implementacji. README otrzyma sprawdzone instrukcje podczas A7/B6. Reset nie resetuje rzeczywistego rachunku dostawcy. Każdy raport podaje datę, model, konfigurację, commit, liczebność, błędy i zakres; offline oraz live są widoczne osobno.
+Po A1 działają `make setup`, `make dev`, `make check` i `make test`; od A2 `make setup` uzupełnia także puste tokeny demo, a od A4 importuje konfigurację i sprawdza Presidio. Od A4 działa też `make reload-config`. Pozostałe komendy kończą się błędem do czasu implementacji. README otrzyma sprawdzone instrukcje podczas A7/B6. Reset nie resetuje rzeczywistego rachunku dostawcy. Każdy raport podaje datę, model, konfigurację, commit, liczebność, błędy i zakres; offline oraz live są widoczne osobno.
 
 ## 10. Warunki ukończenia
 

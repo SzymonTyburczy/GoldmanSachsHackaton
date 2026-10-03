@@ -24,6 +24,30 @@ def adapter(client: TestClient) -> DocumentAdapter:
     return client.app.state.documents
 
 
+# Document A as each role receives it: fields outside the role's scope removed, then the
+# secret rule and Presidio applied to the rest.
+REDACTED_A = {
+    "company_name": "Fabrikam Logistics Sp. z o.o.",
+    "status": "active",
+    "notes": (
+        "Fictional demo client A. Regional freight operator; annual KYC refresh is scheduled"
+        " for Q4 2026. Escalations: <EMAIL_ADDRESS>, <PHONE_NUMBER>. Legacy integration key"
+        " <SECRET> must be rotated."
+    ),
+    "review_note": (
+        "Reviewer only: the beneficial ownership chain is still waiting for second-line"
+        " sign-off. Refund account <IBAN_CODE>."
+    ),
+}
+SENSITIVE_A = (
+    "compliance.contact@fabrikam.example",
+    "+48 22 555 01 23",
+    "cpdemo_7Hq2Lm9Xa4Rt8Vw3Nb6Kp1Zc",
+    "03610112347",
+    "PL61 1090 1014 0000 0712 1981 2874",
+)
+
+
 def assert_nothing_from(document_id: str, response: httpx.Response) -> None:
     for value in stored_fields(document_id).values():
         assert value not in response.text
@@ -71,10 +95,10 @@ def test_owner_reads_document_a_within_the_role_scope(
     assert body["request_id"] == response.headers["X-Request-ID"]
     assert sorted(body["output"]["fields"]) == visible
     assert body["redacted_fields"] == removed
-    expected = stored_fields("doc-a")
-    assert body["output"]["fields"] == {name: expected[name] for name in visible}
-    for name in removed:
-        assert expected[name] not in response.text
+    assert body["output"]["fields"] == {name: REDACTED_A[name] for name in visible}
+    stored = stored_fields("doc-a")
+    for value in [*SENSITIVE_A, *(stored[name] for name in removed)]:
+        assert value not in response.text
     assert adapter(client).reads == {"doc-a": 1}
 
 
@@ -154,8 +178,6 @@ def test_summary_is_not_built_and_reads_nothing(
 
 
 def test_artifacts_are_not_built(client: TestClient, new_task: NewTask, execute: Execute) -> None:
-    task_id = new_task("analyst-a")
-
-    response = execute("analyst-a", task_id, "artifacts.admit", artifact_id="artifact-1")
+    response = execute("admin", new_task("admin"), "artifacts.admit", artifact_id="artifact-1")
 
     assert response.status_code == 501
