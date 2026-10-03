@@ -64,6 +64,7 @@ def test_policy_feeds_the_budget_and_pricing_modules() -> None:
         ("controls.access", False),
         ("controls.redaction", False),
         ("controls.budget", False),
+        ("controls.semantic", False),
         ("controls.access", 1),
         ("controls.semantic", "yes"),
         # Thresholds and limits.
@@ -100,6 +101,8 @@ def test_policy_feeds_the_budget_and_pricing_modules() -> None:
         ("pricing.openai_model", "gpt-6-luna-mini"),
         ("pricing.openai_output_nusd_per_token", -1),
         ("pricing.openai_output_nusd_per_token", 0.5),
+        ("pricing.openai_output_nusd_per_token", 0),  # reservations need a positive amount
+        ("pricing.typesafe_input_nusd_per_token", 0),
         ("pricing.source_urls", ["http://example.com/prices"]),
         ("pricing.mode", "batch"),
         # Format.

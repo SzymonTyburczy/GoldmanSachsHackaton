@@ -1,4 +1,4 @@
-# ControlProof — AI Control Layer
+# ContrAl — AI Control Layer
 
 Warstwa kontroli pomiędzy aplikacją/agentem a dokumentami i modelami AI. Sprawdza dostęp, usuwa wskazane dane wrażliwe, wykrywa podejrzane instrukcje, ogranicza zużycie i zapisuje wynik każdej operacji.
 

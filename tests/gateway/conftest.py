@@ -1,6 +1,6 @@
 """Gateway test fixtures: demo identities with test tokens, tasks and an active config."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from uuid import uuid4
 
@@ -8,8 +8,9 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.main import create_app
 from app.settings import Settings
-from tests.gateway.support import TOKENS, activate_config
+from tests.gateway.support import TOKENS, StubProviders, activate_config
 
 
 @pytest.fixture
@@ -20,6 +21,17 @@ def settings(db_path: Path) -> Settings:
         token_reviewer_a=TOKENS["reviewer-a"],
         token_admin=TOKENS["admin"],
     )
+
+
+@pytest.fixture
+def providers() -> StubProviders:
+    return StubProviders()
+
+
+@pytest.fixture
+def client(settings: Settings, providers: StubProviders) -> Iterator[TestClient]:
+    with TestClient(create_app(settings, providers)) as test_client:
+        yield test_client
 
 
 @pytest.fixture

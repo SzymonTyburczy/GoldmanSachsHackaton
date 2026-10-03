@@ -6,7 +6,7 @@ Kolejność pracy: [plan](PLAN_DWOCH_OSOB.md). Właściciele plików i sposób w
 
 ## 1. Co budujemy i co oboje musicie rozumieć
 
-ControlProof jest serwerem kontrolującym dostęp do podłączonych narzędzi i modeli. Użytkownikiem panelu jest IT/security. Dokumenty klientów A/B są syntetycznym przykładem użycia.
+ContrAl jest serwerem kontrolującym dostęp do podłączonych narzędzi i modeli. Użytkownikiem panelu jest IT/security. Dokumenty klientów A/B są syntetycznym przykładem użycia.
 
 | Pojęcie | Znaczenie w naszym projekcie |
 |---|---|
@@ -38,7 +38,7 @@ Zakres podstawowy: dostęp, redakcja, jeden detektor AI, budżet, feed artefakt�
 | Testy | pytest, pytest-asyncio, HTTPX | Testy jednostkowe, HTTP, współbieżności i live |
 | Kontrola kodu | Ruff | Formatowanie i lint |
 
-Osoba 1 podczas A1 zapisuje faktycznie zainstalowane wersje w `uv.lock`; osoba 2 sprawdza odtworzenie przez `uv sync --locked`. Zainstalowane w A1: Python 3.12.14, FastAPI 0.142.2 (Starlette 1.7.0), Pydantic 2.13.5, Uvicorn 0.54.0, HTTPX 0.28.1, `openai` 3.24.0, Presidio 2.2.364, spaCy 3.8.16 z `en_core_web_sm` i `pl_core_news_sm` 3.8.0 (wheele przypięte w lockfile), pytest 9.1.1, pytest-asyncio 1.4.0, Ruff 0.16.10. Natywna telemetria OpenTelemetry w FastAPI jest wyłączona, bo może eksportować treść błędów walidacji. Nie potrzebujemy osobnego frontendu Node, ORM ani wdrożenia chmurowego do podstawowego demo. Dokumentacja: [FastAPI](https://fastapi.tiangolo.com/), [uv: lockfile](https://docs.astral.sh/uv/concepts/projects/sync/).
+Maciek podczas A1 zapisuje faktycznie zainstalowane wersje w `uv.lock`; Paweł sprawdza odtworzenie przez `uv sync --locked`. Zainstalowane w A1: Python 3.12.14, FastAPI 0.142.2 (Starlette 1.7.0), Pydantic 2.13.5, Uvicorn 0.54.0, HTTPX 0.28.1, `openai` 3.24.0, Presidio 2.2.364, spaCy 3.8.16 z `en_core_web_sm` i `pl_core_news_sm` 3.8.0 (wheele przypięte w lockfile), pytest 9.1.1, pytest-asyncio 1.4.0, Ruff 0.16.10. Natywna telemetria OpenTelemetry w FastAPI jest wyłączona, bo może eksportować treść błędów walidacji. Nie potrzebujemy osobnego frontendu Node, ORM ani wdrożenia chmurowego do podstawowego demo. Dokumentacja: [FastAPI](https://fastapi.tiangolo.com/), [uv: lockfile](https://docs.astral.sh/uv/concepts/projects/sync/).
 
 ### Podział między Jev, Presidio i Lunę
 
@@ -59,7 +59,7 @@ Luna wyłącznie generuje podsumowanie przez `AsyncOpenAI.responses.create`. Ust
 
 ### Presidio: konkretny zakres
 
-Osoba 1 instaluje dwa pakiety Presidio oraz lokalne pipeline'y spaCy: [`en_core_web_sm`](https://spacy.io/models/en) i [`pl_core_news_sm`](https://spacy.io/models/pl). Przypina wersje pakietów/modeli podczas A1/A4. Konfiguruje `NlpEngineProvider`, języki `en`/`pl`, właściwe etykiety NER i rejestr recognizerów; nie zakłada, że konfiguracja angielska zapewnia obsługę polskiego. Instalacja i sprawdzenie modeli odbywają się w setupie, nie podczas żądania.
+Maciek instaluje dwa pakiety Presidio oraz lokalne pipeline'y spaCy: [`en_core_web_sm`](https://spacy.io/models/en) i [`pl_core_news_sm`](https://spacy.io/models/pl). Przypina wersje pakietów/modeli podczas A1/A4. Konfiguruje `NlpEngineProvider`, języki `en`/`pl`, właściwe etykiety NER i rejestr recognizerów; nie zakłada, że konfiguracja angielska zapewnia obsługę polskiego. Instalacja i sprawdzenie modeli odbywają się w setupie, nie podczas żądania.
 
 W P0 wykrywamy `EMAIL_ADDRESS`, `PHONE_NUMBER`, `IBAN_CODE`, `CREDIT_CARD` i `PL_PESEL`, wymienione w [katalogu encji Presidio](https://presidio.dataprivacystack.org/supported_entities/). Rejestrujemy ich obsługę dla obu języków i testujemy syntetyczne przykłady oraz fałszywe alarmy. Wykrywanie imion/nazwisk `PERSON` dopuszczamy dopiero po sprawdzeniu mapowania NER i próbek danego języka.
 
@@ -112,6 +112,17 @@ Diagram pokazuje ogólną zasadę. Podsumowanie wymaga wcześniej odczytania doz
 `documents.read` kończy się po filtrze danych i detektorze, bez modelu podsumowującego. `artifacts.admit` używa walidacji formatu, manifestu i feedu; nie wywołuje AI. Odrębny test budżetu używa testowego adaptera o stałym koszcie.
 
 Chronimy podłączone adaptery. Model/klient nie ma kluczy TypeSafe ani OpenAI, dostępu do plików dokumentów ani publicznego endpointu pomijającego gateway. W MVP adaptery są w procesie serwera: nie deklarujemy izolacji od administratora hosta ani złośliwego kodu z tymi samymi uprawnieniami.
+
+### Doprecyzowania z A5 — do potwierdzenia przez Pawła
+
+- **Przebieg.** `app/gateway.py` łączy kroki 2–8. Przy przyjęciu żądanie dostaje wiersz `requests` (`app/idempotency.py`), w jednej transakcji z limitami: na minutę (`429 RATE_LIMITED`, `Retry-After`), na zadanie (`200 DENY BUDGET_EXCEEDED`) i równoległości (`200 DENY CONCURRENCY_EXCEEDED`). Odmowy limitów nie są zapisywane, więc ten sam klucz można użyć później.
+- **Idempotencja.** Ten sam klucz i body zwracają zapisaną (zredagowaną) odpowiedź bez nowych zdarzeń i wywołań; `request_id` w body jest pierwotny. Inne body: `409 IDEMPOTENCY_CONFLICT`. Żądanie w toku lub przerwane: `409 REQUEST_PENDING`. Gdy nic nie zostało wywołane ani zarezerwowane, wiersz jest usuwany (np. `503` przed adapterem). Nowe kody `RATE_LIMITED`, `IDEMPOTENCY_CONFLICT`, `REQUEST_PENDING` są zmianą kontraktu.
+- **Dostawcy.** Klucze z `.env`, timeouty i `max_output_tokens` z przypiętej polityki (`app/adapters/providers.py`). Brak klucza TypeSafe: `DENY DETECTOR_UNAVAILABLE`, brak klucza OpenAI przy podsumowaniu: `DENY UPSTREAM_FAILED` — oba przed odczytem dokumentu. `controls.semantic` musi mieć `true`; stawki `typesafe_input` i `openai_output` muszą być dodatnie.
+- **Detektor.** Także `documents.read` przechodzi przez Jev (stan: pola `outbound_fields` po redakcji, pusty prompt). Stan większy niż `max_detector_state_chars`: `INPUT_TOO_LARGE`. Każde wywołanie idzie przez `app.provider_calls`: rezerwacja, zdarzenie intencji `budget ALLOW STARTED`, wywołanie z limitem czasu polityki, rozliczenie. Błąd, timeout lub brak usage Jev: `DENY DETECTOR_UNAVAILABLE`, Luna nie startuje, rezerwacja zostaje `UNKNOWN`.
+- **Podsumowanie.** Liczenie tokenów i generowanie dostają to samo wejście. Błąd liczenia: `TOKEN_COUNT_UNAVAILABLE`; za dużo tokenów: `INPUT_TOO_LARGE`; odmowa/niepełna odpowiedź Luny: `UPSTREAM_FAILED` (`FAILED`); timeout: `UPSTREAM_TIMEOUT` (`UNKNOWN`). Wynik przechodzi regułę sekretów i Presidio (`redaction/post_output`).
+- **Limity rezerwacji.** Przypięte, obniżone do aktywnej polityki, jeśli admin zmienił ją w trakcie żądania; `limit_version` to wersja aktywna. Start serwera wywołuje `budget.reconcile_after_restart`.
+- **Odpowiedź.** `usage` zawiera wszystkie wywołania dostawców, także przy `DENY`.
+- **Ograniczenia.** Rezerwacje `UNKNOWN` trzymają slot wywołania dostawcy; przy `max_concurrency_per_principal=2` dwa timeouty blokują użytkownika do ręcznego uzgodnienia, którego nie ma. `review_note` widziany przez reviewera nie przechodzi przez Jev. Limit body 32 KiB nie jest zbudowany.
 
 ## 4. Wspólne kontrakty danych
 
@@ -173,7 +184,7 @@ Kod w `app/contracts.py` doprecyzowuje tabelę powyżej. Zmiana tych ustaleń je
 - `AuditEvent` ma dodatkowo `schema_version`, `tool`, `agent_id`, `client_id`, `redacted_fields`, `redacted_entity_counts` (tylko typ encji → liczba) i `semantic`. Wartości niedostępne, np. przed załadowaniem polityki, to `null`.
 - `output` jest obiektem z polem `kind`: `document` (`document_id`, `fields`), `summary` (`document_id`, `text`) lub `artifact` (`artifact_id`, `sha256`). `DENY` wymaga `output=null`. `ALLOW`/`REDACT` wymagają `SUCCEEDED`, `output` i kodu `OK`/`PII_REDACTED`.
 - Błędy HTTP mają postać `ErrorResponse`: `schema_version`, `request_id`, `reason_code` i przy `422` listę `errors` z polami `loc` i `type`, bez przesłanych wartości. Kod `NOT_IMPLEMENTED` zwracają wyłącznie trasy szkieletu.
-- Schemat SQLite jest w `app/schema.sql` (`PRAGMA user_version = 1`). Nieznana wersja zatrzymuje start. `audit_events` jest tylko do dopisywania. `budget_accounts` przechowuje `spent`/`reserved`, a limit pochodzi z aktywnej polityki w chwili rezerwacji. Tabele budżetu domyka osoba 2 w B3.
+- Schemat SQLite jest w `app/schema.sql` (`PRAGMA user_version = 1`). Nieznana wersja zatrzymuje start. `audit_events` jest tylko do dopisywania. `budget_accounts` przechowuje `spent`/`reserved`, a limit pochodzi z aktywnej polityki w chwili rezerwacji. Tabele budżetu domyka Paweł w B3.
 
 ## 5. API, tożsamości i dane demo
 
@@ -215,7 +226,7 @@ Do Jev i OpenAI dopuszczamy wyłącznie pola `company_name`, `status`, `notes` i
 - **Dostęp do dokumentu.** Kontrola dostępu sprawdza katalog `data/documents/catalog.json` i nie otwiera treści. Dokument nieznany i dokument innego klienta dają ten sam wynik: `200`, `DENY`, `CLIENT_FORBIDDEN`, etap `pre_document`, wszystkie adaptery `NOT_CALLED`. Dotyczy to też `documents.summarize`.
 - **Pola według roli.** Po odczycie zostają tylko pola z listy dozwolonych dla roli, zgodnie z tabelą powyżej; od A4 lista pochodzi z polityki (`acl.<rola>.fields`). Pozostałe pola trafiają z nazwy do `redacted_fields`, a wynik ma `REDACT` i `PII_REDACTED`.
 - **Błąd adaptera.** Nieczytelny lub niezgodny plik dokumentu daje `DENY` z `UPSTREAM_FAILED`, `execution_status=FAILED` i `document_read=FAILED`, bez treści. `DocumentAdapter.reads` liczy każde wywołanie, także nieudane.
-- **Niezbudowane kroki.** `documents.summarize` po dozwolonym dostępie oraz `artifacts.admit` zwracają `501 NOT_IMPLEMENTED` do A5 i A6, bez odczytu treści. Nagłówek `Idempotency-Key` jest wymagany, ale jeszcze nie jest zapisywany.
+- **Niezbudowane kroki.** `artifacts.admit` zwraca `501 NOT_IMPLEMENTED` do A6. `documents.summarize` i zapis `Idempotency-Key` działają od A5 (sekcja 3).
 - **Logi i czas w bazie.** Access log Uvicorna zapisuje ścieżkę bez query stringu, bo token wysłany przez pomyłkę w URL nie może trafić do logów. Czas w bazie zapisuje `db.to_db_time()` w formacie `YYYY-MM-DDTHH:MM:SS.ffffffZ`.
 
 ## 6. Jedna polityka, jeden feed
@@ -261,7 +272,7 @@ Feed: `schema_version`, `feed_version`, `rules[]`; każda reguła ma `rule_id`, 
 ### Doprecyzowania z A4: polityka — do potwierdzenia przez Pawła
 
 - **Plik i model.** `config/policy.json` waliduje model `Policy` w `app/policy.py`. Plik nie zawiera `policy_version`, bo numer nadaje serwer. Pola ponad tabelę powyżej:
-  - `controls.access`, `redaction` i `budget` muszą mieć wartość `true`. `semantic` i `artifacts` mają egzekwować A5 i A6; do tego czasu ich ścieżki odpowiadają `501`.
+  - `controls.access`, `redaction` i `budget` muszą mieć wartość `true`. Od A5 także `semantic`. `artifacts` egzekwuje A6; do tego czasu ścieżka odpowiada `501`.
   - `models.allowed` może zawierać tylko `jev-1.13.0` i `gpt-6-luna`. Detektor musi być modelem TypeSafe, a podsumowanie modelem OpenAI. `summary_reasoning_effort` ma tylko wartość `low`, bo tak wysyła adapter.
   - `acl.<analyst|reviewer|admin>` ma `tools` i `fields`. `outbound_fields` to pola, które mogą trafić do dostawcy.
   - `email`, `personal_id` i `secret` nie mogą znaleźć się ani w `acl`, ani w `outbound_fields`.
@@ -286,7 +297,7 @@ Feed: `schema_version`, `feed_version`, `rules[]`; każda reguła ma `rule_id`, 
 
 ### Co jest wspólne dla obu osób
 
-Osoba 2 implementuje `reserve(context, purpose, unit, amount)`, `settle(reservation_id, actual_usage)`, `release_not_sent(reservation_id)` i `mark_unknown(reservation_id)`. Osoba 1 używa ich w gatewayu. Jednostki `nusd` i `test_credit` mają osobne salda; nie wolno ich dodawać. 1 USD = 1 000 000 000 nUSD.
+Paweł implementuje `reserve(context, purpose, unit, amount)`, `settle(reservation_id, actual_usage)`, `release_not_sent(reservation_id)` i `mark_unknown(reservation_id)`. Maciek używa ich w gatewayu. Jednostki `nusd` i `test_credit` mają osobne salda; nie wolno ich dodawać. 1 USD = 1 000 000 000 nUSD.
 
 W jednej krótkiej transakcji SQLite sprawdzamy limity zadania, użytkownika i całego demo oraz dopisujemy rezerwację do wszystkich właściwych liczników. Warunek w każdym zakresie: `spent + reserved + requested <= limit`. Rezerwacja i liczniki są trwałe. Nie trzymamy transakcji przez czas wywołania Jev ani OpenAI. Przy zajętej bazie stosujemy ograniczony retry transakcji, nie ponowienie wywołania dostawcy. SQLite dopuszcza pojedynczego zapisującego; mechanikę transakcji opisuje [dokumentacja SQLite](https://www.sqlite.org/lang_transaction.html).
 
@@ -296,7 +307,7 @@ Rozliczamy także detektor, który zakończył się blokadą, oraz odpowiedź od
 
 ### Jev: osobna taryfa i rezerwacja
 
-Adapter `jev.py` nie używa tokenizera OpenAI ani `max_output_tokens`. W P0 rezerwuje konserwatywnie koszt całego maksymalnego wejścia obsługiwanego przez wybraną wersję, z zapasem: `65536 × input_rate_nusd`. Osoba 2 potwierdza tę granicę i taryfę przed live; przy braku potwierdzenia wywołanie jest blokowane. Taki zapas może odmówić taniej operacji przy końcówce budżetu — pokazujemy to jawnie.
+Adapter `jev.py` nie używa tokenizera OpenAI ani `max_output_tokens`. W P0 rezerwuje konserwatywnie koszt całego maksymalnego wejścia obsługiwanego przez wybraną wersję, z zapasem: `65536 × input_rate_nusd`. Paweł potwierdza tę granicę i taryfę przed live; przy braku potwierdzenia wywołanie jest blokowane. Taki zapas może odmówić taniej operacji przy końcówce budżetu — pokazujemy to jawnie.
 
 Po odpowiedzi rozliczamy rzeczywiste `usage.input_tokens` według taryfy TypeSafe. Jeżeli taryfa nie nalicza wyjścia, jego tokeny zapisujemy jako zużycie z zerową stawką kosztową; nie stosujemy ceny wyjścia Luny. Przy nieznanym koszcie, błędzie po wysłaniu lub timeoutcie zachowujemy rezerwację. Oba adaptery korzystają z tych samych nadrzędnych sald, osobnych rekordów usage i tej samej zasady braku niejawnych retry.
 
@@ -318,7 +329,7 @@ Ten profil jest dostępny wyłącznie w testach lub jawnie włączonym lokalnym 
 
 ## 8. Trwałość, audyt i panel
 
-Minimalne tabele: `tasks`, `requests` (idempotencja i wynik), `budget_accounts`, `reservations`, `audit_events`, `config_versions`. Schemat i inicjalizację zapisuje osoba 1, tabele budżetu uzgadnia z osobą 2. Wszystkie kwoty i liczniki są integer; wszystkie aktualizacje sald transakcyjne.
+Minimalne tabele: `tasks`, `requests` (idempotencja i wynik), `budget_accounts`, `reservations`, `audit_events`, `config_versions`. Schemat i inicjalizację zapisuje Maciek, tabele budżetu uzgadnia z Pawłem. Wszystkie kwoty i liczniki są integer; wszystkie aktualizacje sald transakcyjne.
 
 Audyt zawiera wynik każdej kontroli i wykonania. Nie zapisuje body, pełnego promptu, dokumentów, tokenów dostępowych ani surowych błędów SDK. `redacted_fields` zawiera nazwy pól, nie usunięte wartości. Zapis intencji przed chronionym wykonaniem jest wymagany; awaria tego zapisu kończy się `AUDIT_UNAVAILABLE`. Jeśli zapis końcowy zawiedzie po wykonaniu, stan pozostaje do uzgodnienia — odpowiedź nie może twierdzić, że nic się nie wykonało.
 
@@ -341,7 +352,7 @@ Eksport JSONL pochodzi z tych samych `audit_events`. Nie wymyślamy procentowego
 | Błąd odczytu | `gateway` / `pre_detector` | `DENY UPSTREAM_FAILED`, `FAILED`, `latency_ms` |
 | Odczyt i usunięcie pól | `redaction` / `pre_detector` | `REDACT PII_REDACTED` lub `ALLOW OK`, `SUCCEEDED`, `redacted_fields`, `latency_ms` |
 
-- **Znaczenie pól.** `pre_detector` to etap po odczycie dokumentu, przed wysłaniem danych do Jev lub OpenAI. Detektor dochodzi w A5; w A3 to ostatni krok `documents.read`. `execution_status` zdarzenia dotyczy adaptera, który dany krok uruchamia lub kończy; sama decyzja ma `NOT_CALLED`. `latency_ms` to czas wywołania adaptera; w pozostałych zdarzeniach `null`. `usage`, `model` i `semantic` pozostają puste do A5. `documents.summarize` po dozwolonym dostępie zapisuje `access ALLOW` bez intencji i odpowiada `501`; `artifacts.admit` zapisuje przyjęcie i odpowiada `501`.
+- **Znaczenie pól.** `pre_detector` to etap po odczycie dokumentu, przed wysłaniem danych do Jev lub OpenAI. Kolejne kroki od A5 opisuje sekcja 3. `execution_status` zdarzenia dotyczy adaptera, który dany krok uruchamia lub kończy; sama decyzja ma `NOT_CALLED`. `latency_ms` to czas wywołania adaptera; w pozostałych zdarzeniach `null`. `usage`, `model` i `semantic` wypełniają zdarzenia dostawców (A5). `artifacts.admit` zapisuje przyjęcie i odpowiada `501`.
 - **Awaria zapisu.** Każde zdarzenie to jeden `INSERT` w autocommit, wykonany przed następnym krokiem. Jeśli nie zapisze się zdarzenie przed wywołaniem adaptera (przyjęcie, odmowa lub intencja), odpowiedź to `503 AUDIT_UNAVAILABLE`, a adapter nie startuje. Jeśli nie zapisze się wynik po odczycie, odpowiedź to `200`, `DENY`, `AUDIT_UNAVAILABLE` z `output=null`; `execution_status` i `adapter_calls` pokazują wykonany odczyt. Zapisana intencja zostaje `STARTED` do uzgodnienia. Log aplikacji podaje wtedy tylko `request_id`, etap i klasę błędu.
 - **Odczyt.** `GET /v1/tasks/{id}/events` (właściciel i admin) zwraca zdarzenia właściciela zadania; próby innych osób na tym zadaniu widzi admin w `GET /admin/events`. `GET /admin/events` filtruje po `task_id` i `request_id`. Oba endpointy zwracają `AuditEventPage` (`schema_version`, `events`, `next_after`) od najstarszych; `limit` 1–200 (domyślnie 50), następna strona przez `after=next_after`, ostatnia ma `next_after=null`. `GET /admin/audit/export` zwraca wszystkie zdarzenia jako JSON Lines (`application/x-ndjson`), czytane partiami z tej samej tabeli. Odpowiedzi `/v1/*` i `/admin/*` mają `Cache-Control: no-store`.
 - **Bez treści.** `AuditEvent` nie ma pola na dowolny tekst: tylko identyfikatory, wartości enum, nazwy pól, liczby i usage. Żądania bez poprawnego tokenu i z błędnym schematem nie trafiają do audytu, żeby anonimowy klient nie mógł zapisywać do bazy; widać je w access logu bez query stringu. Testy sprawdzają bazę, eksport i logi pod kątem tokenów i wartości dokumentów.
@@ -350,11 +361,11 @@ Eksport JSONL pochodzi z tych samych `audit_events`. Nie wymyślamy procentowego
 
 | Grupa | Właściciel | Minimalny dowód |
 |---|---|---|
-| Tożsamość i dostęp | Osoba 1 | Brak tokenu, cudzy task, podmieniona rola, A/B, niedozwolone narzędzie: odpowiedni etap odmowy |
-| Dane | Osoba 1 | Sekret/PII nie występuje w wyjściu do Jev/OpenAI, panelu ani audycie; role mają różny zakres |
-| Polityka i feed | Osoba 1 | Reload zmienia wynik, błędna aktualizacja zachowuje ochronę, podmiana bajtów/niebezpieczny format daje blokadę |
-| Semantyka | Osoba 2 | Granica progu na stubie; osobna ewaluacja prawdziwego Jev z błędami klasyfikacji |
-| Budżet | Osoba 2 | Granica limitu, 20/5, restart, timeout, retry, limity między zadaniami i koszt detektora |
+| Tożsamość i dostęp | Maciek | Brak tokenu, cudzy task, podmieniona rola, A/B, niedozwolone narzędzie: odpowiedni etap odmowy |
+| Dane | Maciek | Sekret/PII nie występuje w wyjściu do Jev/OpenAI, panelu ani audycie; role mają różny zakres |
+| Polityka i feed | Maciek | Reload zmienia wynik, błędna aktualizacja zachowuje ochronę, podmiana bajtów/niebezpieczny format daje blokadę |
+| Semantyka | Paweł | Granica progu na stubie; osobna ewaluacja prawdziwego Jev z błędami klasyfikacji |
+| Budżet | Paweł | Granica limitu, 20/5, restart, timeout, retry, limity między zadaniami i koszt detektora |
 | Integracja i audyt | Oboje | Legalny przepływ, każdy etap błędu, idempotencja i brak pominięcia gatewaya w pokazanym zakresie |
 
 Każda kontrola ma test wykrywający jej wyłączenie w kopii testowej. Zestaw AI: co najmniej 12 nowych próbek, oddzielonych od strojenia progu; raportujemy false positives i false negatives oraz wynik każdej próbki. Ustalony cel odbioru dla tego małego zestawu: co najmniej 5/6 legalnych i 5/6 manipulacji ocenionych zgodnie z etykietą. To cel zespołu, nie dowód skuteczności ogólnej. Niespełniony cel oznacza jawny wynik negatywny, a nie podmianę próbek po fakcie.
@@ -377,7 +388,7 @@ Po A1 działają `make setup`, `make dev`, `make check` i `make test`; od A2 `ma
 
 Oboje potraficie: uruchomić projekt z lockfile, wykonać demo z planu, zmienić politykę i feed, odczytać przyczynę odmowy, pokazać test 20/5 i eksport audytu. Drugi laptop uruchamia całość z README. Wszystkie rodziny podstawowych kontroli mają działającą ścieżkę i wynik testów.
 
-Osoba 1 przygotowuje opis i PDF do 10 slajdów; osoba 2 dostarcza dowody, instrukcję i nagranie. Materiały konkursowe przygotowujemy po angielsku. Wskazujemy zależność od internetu/API, ograniczony zakres redakcji, omylność detektora oraz brak izolacji od administratora hosta.
+Maciek przygotowuje opis i PDF do 10 slajdów; Paweł dostarcza dowody, instrukcję i nagranie. Materiały konkursowe przygotowujemy po angielsku. Wskazujemy zależność od internetu/API, ograniczony zakres redakcji, omylność detektora oraz brak izolacji od administratora hosta.
 
 ## 11. Źródła i kwestie do potwierdzenia
 
@@ -385,11 +396,11 @@ Przeczytano [pełny brief](../dane_wejsciowe/opis_tasku.pdf), [regulamin](../dan
 
 | Kwestia | Stan / właściciel |
 |---|---|
-| Zewnętrzne API zamiast lokalnego detektora | Decyzja zespołu: Jev do oceny i Luna do generowania; Presidio działa lokalnie. Brief wskazuje oczekiwanie modeli lokalnych i brak dostarczanych subskrypcji. Osoba 2 potwierdza u mentora dopasowanie wariantu API. Nie uznajemy automatycznie tej różnicy za rozstrzygniętą. |
+| Zewnętrzne API zamiast lokalnego detektora | Decyzja zespołu: Jev do oceny i Luna do generowania; Presidio działa lokalnie. Brief wskazuje oczekiwanie modeli lokalnych i brak dostarczanych subskrypcji. Paweł potwierdza u mentora dopasowanie wariantu API. Nie uznajemy automatycznie tej różnicy za rozstrzygniętą. |
 | Zasoby lokalnych modeli | W P0 pokazujemy wspólny mechanizm limitów na lokalnym adapterze testowym. To nie jest lokalna inferencja. Jeśli partner wymaga działającego lokalnego modelu, trzeba wspólnie zmienić zakres. |
-| Dostęp do Jev i OpenAI | Osobne klucze, dostęp do obu modeli, taryfy/limity i internet — weryfikuje osoba 2 w B1. |
-| Start i deadline | `terms.pdf`, pkt 5 zapisuje 3.10 11:00 PM → 4.10 11:00 PM; starsze materiały podawały 11:00. Osoba 1 zapisuje wiążącą odpowiedź organizatora z datą i źródłem. Nie rozstrzygamy PM samodzielnie. |
-| Wagi | Brief: 30/20/20/15/15; terms: 30/20/20/20/10. Osoba 1 potwierdza wiążącą wersję. Testy i raportowanie pozostają w podstawie. |
-| Historyczny exploit | Osoba 1 pokazuje mentorowi walidację artefaktu/feed i potwierdza, czy taki zakres spełnia oczekiwanie, czy potrzebny jest przykład konkretnego CVE. |
+| Dostęp do Jev i OpenAI | Osobne klucze, dostęp do obu modeli, taryfy/limity i internet — weryfikuje Paweł w B1. |
+| Start i deadline | `terms.pdf`, pkt 5 zapisuje 3.10 11:00 PM → 4.10 11:00 PM; starsze materiały podawały 11:00. Maciek zapisuje wiążącą odpowiedź organizatora z datą i źródłem. Nie rozstrzygamy PM samodzielnie. |
+| Wagi | Brief: 30/20/20/15/15; terms: 30/20/20/20/10. Maciek potwierdza wiążącą wersję. Testy i raportowanie pozostają w podstawie. |
+| Historyczny exploit | Maciek pokazuje mentorowi walidację artefaktu/feed i potwierdza, czy taki zakres spełnia oczekiwanie, czy potrzebny jest przykład konkretnego CVE. |
 
 Potwierdzenia dopisujemy w tej tabeli. Do czasu odpowiedzi zachowujemy bufor do wcześniejszego terminu. Starsze porównania pomysłów, czteroosobowy skład i inne kategorie są w archiwum i nie sterują implementacją.
