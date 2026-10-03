@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "artifacts": [
+    {
+      "artifact_id": "art-summary-template",
+      "sha256": "25c77dc1027525cb4bffbe9dde16e4fd6ec5b43d13ba677e60211213d0b0f902"
+    },
+    {
+      "artifact_id": "art-model-card",
+      "sha256": "1533538ebedc46f7681ca256705b83796697143b6aae451b832593f0f6bad857"
+    },
+    {
+      "artifact_id": "art-tampered",
+      "sha256": "c52e51c5ac901208b6b36825297de16d2d1b1c2cfba0cd6056a9f4ef43b0076f"
+    },
+    {
+      "artifact_id": "art-pickle",
+      "sha256": "4f091f5deb758fd15c99c8692a777ba2163e824654ac7e90d1adab809f5dce2c"
+    }
+  ]
+}

@@ -112,8 +112,8 @@ class ControlsPolicy(StrictModel):
     """Access, redaction, budget and the semantic detector cannot be switched off.
 
     Without the detector no document leaves the gateway, so switching it off would only
-    look like a setting. ``artifacts`` is enforced from A6; until then its path answers
-    501 regardless of this setting.
+    look like a setting. ``artifacts=false`` refuses ``artifacts.admit`` altogether
+    (``TOOL_FORBIDDEN``); it never admits an artifact without the manifest and feed check.
     """
 
     access: HardControl
@@ -282,7 +282,7 @@ class Policy(StrictModel):
 
 
 # --------------------------------------------------------------------------------------
-# Feed document (rules are used by artifacts.admit in A6)
+# Feed document (rules are checked by artifacts.admit, app.controls.artifacts)
 # --------------------------------------------------------------------------------------
 
 
@@ -310,7 +310,7 @@ DOCUMENT_MODELS: dict[str, type[Policy] | type[Feed]] = {"policy": Policy, "feed
 
 
 # --------------------------------------------------------------------------------------
-# API models: GET and PUT /admin/policy
+# API models: GET and PUT /admin/policy and /admin/feed
 # --------------------------------------------------------------------------------------
 
 
@@ -331,6 +331,25 @@ class ActivePolicy(StrictModel):
     created_at: UtcDatetime
     created_by: Identifier
     policy: Policy
+
+
+class FeedUpdate(StrictModel):
+    """Body of ``PUT /admin/feed``: the complete feed and the version it replaces."""
+
+    schema_version: SchemaVersion
+    expected_version: ConfigVersion | None  # None only while no feed is active
+    feed: Feed
+
+
+class ActiveFeed(StrictModel):
+    """Body of ``GET`` and ``PUT /admin/feed``."""
+
+    schema_version: SchemaVersion = 1
+    feed_version: ConfigVersion
+    sha256: Sha256Hex
+    created_at: UtcDatetime
+    created_by: Identifier
+    feed: Feed
 
 
 # --------------------------------------------------------------------------------------
