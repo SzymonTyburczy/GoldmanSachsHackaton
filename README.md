@@ -2,7 +2,7 @@
 
 Warstwa kontroli pomiędzy aplikacją/agentem a dokumentami i modelami AI. Sprawdza dostęp, usuwa wskazane dane wrażliwe, wykrywa podejrzane instrukcje, ogranicza zużycie i zapisuje wynik każdej operacji.
 
-**Stan na 3.10.2026:** ukończone kroki A1 (szkielet) i A2 (tożsamość, zadania i dostęp do dokumentów). Działają: `GET /health`, uwierzytelnienie trzema tokenami demo, tworzenie i odczyt zadań oraz `documents.read` z kontrolą klienta przed odczytem treści i usuwaniem pól według roli. Podsumowanie, artefakty i endpointy admina odpowiadają `501 NOT_IMPLEMENTED`. Audyt, polityka, Presidio, Jev, Luna i budżet jeszcze nie działają. Plan dotyczy **dwóch osób**.
+**Stan na 3.10.2026:** ukończone kroki A1 (szkielet), A2 (tożsamość, zadania i dostęp do dokumentów) i A3 (audyt). Działają: `GET /health`, uwierzytelnienie trzema tokenami demo, tworzenie i odczyt zadań, `documents.read` z kontrolą klienta przed odczytem treści i usuwaniem pól według roli oraz audyt każdego kroku: historia zadania (`GET /v1/tasks/{id}/events`), lista zdarzeń (`GET /admin/events`) i eksport JSONL (`GET /admin/audit/export`). Adaptery Jev i Luna (B2) oraz rezerwacje budżetu (B3) istnieją jako moduły z testami offline; gateway wywoła je w A5. Podsumowanie, artefakty i pozostałe endpointy admina odpowiadają `501 NOT_IMPLEMENTED`. Polityka i Presidio jeszcze nie działają. Plan dotyczy **dwóch osób**.
 
 ## Uruchomienie
 

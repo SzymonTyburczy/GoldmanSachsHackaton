@@ -105,7 +105,7 @@ def test_unknown_document_is_denied_like_document_b(
     other_client = execute("analyst-a", task_id, "documents.read", document_id="doc-b").json()
     unknown = execute("analyst-a", task_id, "documents.read", document_id="doc-zz").json()
 
-    ignore = {"request_id"}
+    ignore = {"request_id", "audit_event_ids"}
     assert {k: v for k, v in unknown.items() if k not in ignore} == {
         k: v for k, v in other_client.items() if k not in ignore
     }

@@ -75,9 +75,7 @@ def test_missing_idempotency_key_is_rejected(
         ("PUT", "/admin/policy"),
         ("GET", "/admin/feed"),
         ("PUT", "/admin/feed"),
-        ("GET", "/admin/events"),
         ("GET", "/admin/metrics"),
-        ("GET", "/admin/audit/export"),
         ("GET", "/admin/test-results"),
     ],
 )

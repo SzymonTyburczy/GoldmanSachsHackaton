@@ -32,6 +32,7 @@ def settings(settings: Settings, documents_dir: Path) -> Settings:
 @pytest.mark.usefixtures("active_config")
 def test_unreadable_document_fails_closed(
     client: TestClient,
+    headers: dict[str, dict[str, str]],
     documents_dir: Path,
     new_task: Callable[..., str],
     execute: Callable[..., httpx.Response],
@@ -49,6 +50,18 @@ def test_unreadable_document_fails_closed(
     assert body["output"] is None
     assert "Fabrikam" not in response.text
     assert client.app.state.documents.read_count == 1  # the attempt is still counted
+    events = client.get(
+        "/admin/events", params={"request_id": body["request_id"]}, headers=headers["admin"]
+    ).json()["events"]
+    assert [
+        (e["control_id"], e["stage"], e["reason_code"], e["execution_status"]) for e in events
+    ] == [
+        ("gateway", "admission", "OK", "NOT_CALLED"),
+        ("access", "pre_document", "OK", "STARTED"),
+        ("gateway", "pre_detector", "UPSTREAM_FAILED", "FAILED"),
+    ]
+    assert events[-1]["adapter_calls"]["document_read"] == "FAILED"
+    assert "Fabrikam" not in str(events)
 
 
 @pytest.mark.parametrize("active", [[], ["policy"], ["feed"]])
