@@ -1,4 +1,4 @@
-# ContrAl developer commands. Live checks make real, billable provider requests.
+# Contral developer commands. Live checks make real, billable provider requests.
 
 UV ?= uv
 HOST ?= 127.0.0.1

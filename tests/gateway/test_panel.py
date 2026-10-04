@@ -11,7 +11,7 @@ def test_panel_is_served_with_a_restrictive_csp(client: TestClient) -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "<title>ContrAl</title>" in response.text
+    assert "<title>Contral</title>" in response.text
     csp = response.headers["Content-Security-Policy"]
     assert "default-src 'self'" in csp
     assert "frame-ancestors 'none'" in csp

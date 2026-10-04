@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/readme/contral.svg" alt="ContrAl — AI control layer" width="480">
+  <img src="assets/readme/contral.svg" alt="Contral — AI control layer" width="480">
 </p>
 
 <p align="center">
@@ -7,7 +7,7 @@
   Built for the Goldman Sachs challenge at HackYeah 2026.
 </p>
 
-ContrAl sits between an agent and its tools. It checks permissions, redacts sensitive data, assesses suspicious instructions, reserves provider costs and records what actually executed. An operator dashboard brings requests, decisions, budgets, policy changes and audit history into one place.
+Contral sits between an agent and its tools. It checks permissions, redacts sensitive data, assesses suspicious instructions, reserves provider costs and records what actually executed. An operator dashboard brings requests, decisions, budgets, policy changes and audit history into one place.
 
 ## How it works
 
