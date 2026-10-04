@@ -1,0 +1,945 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contral — AI control layer</title>
+<meta name="description" content="Contral sits between AI agents and everything they touch. Access control, local data masking, semantic risk checks, budget reservations, artifact admission and a full audit trail.">
+<meta property="og:title" content="Contral — AI control layer">
+<meta property="og:description" content="Move fast. Stay in Control. Access, data, budget and audit enforced on every AI request.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#f7f8fa">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/syne-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+/* Contral site: the operator-panel design language. Monochrome, one accent, thin lines, large radii. */
+
+@font-face {
+  font-family: "Inter Variable";
+  src: url("/fonts/inter-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Syne";
+  src: url("/fonts/syne-latin-700-normal.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@property --angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+:root {
+  color-scheme: light;
+  --bg: #f7f8fa;
+  --paper: #ffffff;
+  --surface: #fafafa;
+  --soft: #f6f7f9;
+  --ink: #0a0a0a;
+  --ink-soft: #262626;
+  --muted: #6b6b6b;
+  --faint: #a3a3a3;
+  --line: #e7e7e7;
+  --line-strong: #d4d4d4;
+  --wire: #c9ccd3;
+  --accent: #3d5afe;
+  --accent-soft: #eef1ff;
+  --accent-line: #dce1fd;
+  --accent-ink: #3448c9;
+  --accent-arrow: #8795df;
+  --ok: #15803d;
+  --ok-bg: #f0fdf4;
+  --ok-line: #bbf7d0;
+  --bad: #b91c1c;
+  --bad-bg: #fef2f2;
+  --bad-line: #fecaca;
+  --bad-edge: #df8383;
+  --bad-tint: #fff6f6;
+  --font-sans: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-logo: "Syne", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --wrap: 1200px;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a { color: inherit; text-decoration: none; }
+::selection { background: var(--accent-soft); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+
+.wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
+.mono { font-family: var(--font-mono); }
+
+.ic { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+.wordmark {
+  font-family: var(--font-logo);
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.eyebrow {
+  margin: 0 0 14px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+h1, h2, h3 { margin: 0; font-weight: 550; letter-spacing: -0.045em; line-height: 1.08; }
+h2 { font-size: clamp(32px, 4.4vw, 52px); }
+h3 { font-size: 21px; letter-spacing: -0.025em; line-height: 1.25; }
+
+.lede { margin: 18px 0 0; max-width: 640px; font-size: 18px; color: var(--muted); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.badge.mono { font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
+.badge.accent { background: var(--accent-soft); border-color: rgb(61 90 254 / 0.2); color: var(--accent); }
+.badge.ok { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+.badge.bad { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad); }
+.badge .ic { width: 15px; height: 15px; stroke-width: 2.4; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 46px;
+  padding: 0 22px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.btn .ic { width: 18px; height: 18px; }
+.btn-primary { background: var(--ink); color: #fff; }
+.btn-primary:hover { background: var(--ink-soft); }
+.btn-secondary { background: var(--paper); border-color: var(--line-strong); }
+.btn-secondary:hover { border-color: var(--ink); }
+.btn-sm { height: 38px; padding: 0 16px; font-size: 14px; }
+
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 22px; }
+
+.icon-box {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #e2e5eb;
+  border-radius: 12px;
+  background: var(--bg);
+  color: #7c88a5;
+}
+
+.icon-box[data-tone="ok"] { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+.icon-box[data-tone="accent"] { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+.icon-box[data-tone="bad"] { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad); }
+.icon-box[data-tone="ink"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+/* ------------------------------------------------------------ orb (from the panel) */
+
+.orb {
+  --orb-bg: oklch(98% 0.01 270);
+  --orb-c1: oklch(68% 0.19 270);
+  --orb-c2: oklch(80% 0.12 225);
+  --orb-c3: oklch(74% 0.16 305);
+  --angle: 0deg;
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--orb-bg);
+  filter: contrast(1.08) saturate(1.1);
+  animation: orb-spin 9s linear infinite;
+}
+
+.orb::before, .orb::after { content: ""; position: absolute; inset: -25%; border-radius: 50%; }
+.orb::before { background: conic-gradient(from var(--angle), var(--orb-c1), var(--orb-c2), var(--orb-c3), var(--orb-c1)), var(--orb-bg); filter: blur(20px); opacity: 0.9; }
+.orb::after {
+  background:
+    radial-gradient(circle at 35% 30%, var(--orb-bg) 0 18%, transparent 52%),
+    conic-gradient(from calc(var(--angle) * -1.6 + 120deg), transparent 0 25%, var(--orb-c3) 40%, transparent 60%, var(--orb-c2) 80%, transparent 95%);
+  filter: blur(16px);
+  mix-blend-mode: multiply;
+  opacity: 0.85;
+}
+
+@keyframes orb-spin { to { --angle: 360deg; } }
+
+/* ------------------------------------------------------------ nav */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgb(255 255 255 / 0.86);
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+
+.nav-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 68px; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand .wordmark { font-size: 16px; }
+.brand-sub { padding-left: 14px; border-left: 1px solid var(--line-strong); font-size: 13px; color: var(--muted); }
+.nav-links { display: flex; align-items: center; gap: 28px; font-size: 14px; color: var(--muted); }
+.nav-links a:hover { color: var(--ink); }
+
+/* ------------------------------------------------------------ hero */
+
+.hero { padding: 72px 0 56px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+.hero h1 { font-size: clamp(42px, 5vw, 66px); letter-spacing: -0.05em; line-height: 1.02; }
+.hero h1 span { color: var(--muted); }
+.hero .lede { font-size: 19px; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+
+/* Scene: agents → Contral → destinations. Designed at 760×520, scaled with the container. */
+.scene-wrap { container-type: inline-size; }
+.scene { --u: calc(100cqw / 760); position: relative; aspect-ratio: 760 / 520; }
+.scene > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.wire { fill: none; stroke: var(--wire); stroke-width: 2; stroke-linecap: round; }
+.head { fill: none; stroke: var(--wire); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.snode {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+  padding: 0 calc(14 * var(--u));
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: calc(16 * var(--u));
+  font-size: calc(16 * var(--u));
+  font-weight: 550;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  transition: border-color 0.25s, background-color 0.25s, box-shadow 0.25s;
+}
+
+.snode .icon-box { width: calc(38 * var(--u)); height: calc(38 * var(--u)); border-radius: calc(11 * var(--u)); }
+.snode .ic { width: calc(19 * var(--u)); height: calc(19 * var(--u)); }
+.snode.hit { border-color: var(--bad-edge); background: var(--bad-tint); }
+
+.sgate {
+  position: absolute;
+  left: calc(265 * var(--u));
+  top: calc(130 * var(--u));
+  width: calc(230 * var(--u));
+  height: calc(260 * var(--u));
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: calc(14 * var(--u));
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: calc(26 * var(--u));
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.sgate.hit { border-color: var(--bad-line); box-shadow: 0 0 0 calc(10 * var(--u)) rgb(185 28 28 / 0.07); }
+.sgate .orb { width: calc(108 * var(--u)); box-shadow: 0 0 calc(30 * var(--u)) 0 rgb(120 110 255 / 0.25); }
+.sgate .wordmark { font-size: calc(15 * var(--u)); margin-right: -0.3em; }
+.sgate-tags { display: flex; gap: calc(6 * var(--u)); }
+.sgate-tags .badge { font-size: calc(12 * var(--u)); padding: calc(2 * var(--u)) calc(10 * var(--u)); line-height: 1.5; }
+.scount { position: absolute; left: calc(265 * var(--u)); width: calc(230 * var(--u)); top: calc(404 * var(--u)); display: flex; justify-content: center; }
+.scount .badge { font-size: calc(13 * var(--u)); padding: calc(3 * var(--u)) calc(12 * var(--u)); }
+.scount .ic { width: calc(14 * var(--u)); height: calc(14 * var(--u)); }
+
+/* ------------------------------------------------------------ pillars strip */
+
+.pillars { padding: 8px 0 24px; }
+.pillars-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.pillar { display: flex; align-items: center; gap: 14px; padding: 18px 20px; }
+.pillar strong { display: block; font-size: 16px; font-weight: 550; letter-spacing: -0.02em; }
+.pillar span { font-size: 13.5px; color: var(--muted); }
+
+/* ------------------------------------------------------------ sections */
+
+section.block { padding: 96px 0 0; }
+.block-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 36px; }
+.block-head .lede { margin-top: 14px; }
+
+.pipeline { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 26px 26px 28px; list-style: none; }
+.pstep { position: relative; display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.pstep::after { content: ""; position: absolute; top: 21px; left: 54px; right: -6px; height: 1px; background: var(--line-strong); }
+.pstep:last-child::after { display: none; }
+.pstep .icon-box { margin-bottom: 14px; }
+.pstep strong { font-size: 16px; font-weight: 550; letter-spacing: -0.02em; }
+.pstep span { margin-top: 4px; font-size: 13px; line-height: 1.45; color: var(--muted); }
+
+/* dashboard screenshots */
+.shot { position: relative; margin: 0; overflow: hidden; background: var(--paper); border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 40px 80px -40px rgb(20 30 60 / 0.22); }
+.shot-bar { display: flex; align-items: center; gap: 7px; height: 42px; padding: 0 16px; background: var(--paper); border-bottom: 1px solid var(--line); }
+.shot-bar i { width: 11px; height: 11px; border-radius: 50%; background: #e3e5ea; }
+.shot-bar span { margin-left: 12px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shot img { display: block; width: 100%; height: auto; background: var(--bg); }
+.shot.fade::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 110px; background: linear-gradient(rgb(247 248 250 / 0), var(--bg)); pointer-events: none; }
+.steps3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+.step { display: flex; gap: 14px; align-items: flex-start; padding: 18px 20px; }
+.step .num { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--accent-line); border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.step strong { display: block; font-size: 16px; font-weight: 550; letter-spacing: -0.02em; }
+.step span:not(.num) { font-size: 13.5px; color: var(--muted); }
+.ops { margin-top: 64px; }
+.ops-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 14px 24px; margin-bottom: 20px; }
+.ops-head h3 { font-size: 26px; letter-spacing: -0.035em; }
+.ops-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.ops-tags .badge { background: var(--paper); }
+.ops-shot { max-width: 971px; margin: 0 auto; }
+
+/* live redaction */
+.redact { position: relative; overflow: hidden; margin-top: 16px; padding: 24px 28px 30px; transition: border-color 0.4s, background-color 0.4s; }
+.redact.masked { border-color: var(--accent-line); background: #fcfcff; }
+.redact-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.swap { display: inline-grid; }
+.swap > * { grid-area: 1 / 1; justify-self: start; }
+.hdr-b, .mask-count { opacity: 0; transform: scale(0.92); transition: opacity 0.35s var(--ease), transform 0.35s var(--ease); }
+.hdr-a { transition: opacity 0.3s; }
+.masked .hdr-a { opacity: 0; }
+.masked .hdr-b, .masked .mask-count { opacity: 1; transform: none; }
+.masked .mask-count { transition-delay: 0.6s; }
+.typed { margin: 0; min-height: 3.1em; font-size: clamp(19px, 2.3vw, 26px); line-height: 1.5; letter-spacing: -0.02em; }
+.caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 2px; vertical-align: -0.15em; background: var(--accent); animation: blink 0.9s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.tok .raw, .tok .ph { display: inline-block; overflow: hidden; white-space: nowrap; vertical-align: bottom; }
+.tok .raw {
+  max-width: 40ch;
+  padding: 0 5px;
+  margin: 0 -5px;
+  border-radius: 8px;
+  transition: background-color 0.3s calc(var(--i) * 0.12s), color 0.3s calc(var(--i) * 0.12s), max-width 0.5s var(--ease) calc(var(--i) * 0.18s), opacity 0.3s calc(var(--i) * 0.18s), padding 0.5s calc(var(--i) * 0.18s), margin 0.5s calc(var(--i) * 0.18s);
+}
+.detected .tok .raw { background: var(--bad-bg); color: var(--bad); }
+.masked .tok .raw { max-width: 0; opacity: 0; padding: 0; margin: 0; }
+.tok .ph {
+  max-width: 0;
+  opacity: 0;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.76em;
+  font-weight: 600;
+  line-height: 1.65;
+  letter-spacing: 0;
+  transition: max-width 0.55s var(--ease) calc(var(--i) * 0.18s + 0.2s), opacity 0.4s calc(var(--i) * 0.18s + 0.25s), padding 0.55s calc(var(--i) * 0.18s + 0.2s);
+}
+.masked .tok .ph { max-width: 20ch; opacity: 1; padding: 0 12px; box-shadow: inset 0 0 0 1px rgb(61 90 254 / 0.2); }
+.redact::after { content: ""; position: absolute; top: 0; bottom: 0; left: -30%; width: 30%; background: linear-gradient(90deg, transparent, rgb(61 90 254 / 0.12), transparent); opacity: 0; pointer-events: none; }
+.redact.scan::after { animation: scan 0.8s var(--ease); }
+@keyframes scan { 0% { left: -30%; opacity: 1; } 100% { left: 100%; opacity: 1; } }
+.redact-note { margin: 14px 0 0; font-size: 14px; color: var(--muted); }
+
+/* threats */
+.threats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.threat { display: flex; flex-direction: column; gap: 10px; padding: 28px 30px 30px; }
+.threat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.threat h3 { font-size: 26px; letter-spacing: -0.035em; }
+.threat .verdict { margin: 0; font-size: 20px; font-weight: 550; letter-spacing: -0.025em; color: var(--bad); }
+.threat p.detail { margin: 4px 0 0; font-size: 15px; color: var(--muted); }
+
+.grid20 { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); align-items: start; gap: 6px; width: 100%; max-width: 360px; margin-top: 10px; }
+.grid20 i { display: block; min-width: 0; height: 0; padding-bottom: 100%; border-radius: 6px; border: 1px solid var(--bad-line); background: var(--bad-bg); }
+.grid20 i.ran { background: var(--ink); border-color: var(--ink); }
+
+/* policy */
+.split { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 20px; align-items: stretch; }
+.editor { overflow: hidden; }
+.editor-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 22px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.code { margin: 0; padding: 20px 22px 24px; overflow-x: auto; font-family: var(--font-mono); font-size: 14px; line-height: 1.75; color: var(--ink-soft); }
+.code .k { color: var(--ink); font-weight: 600; }
+.code .s { color: var(--accent-ink); }
+.code .hl { display: inline-block; margin: 0 -8px; padding: 0 8px; border-radius: 7px; background: var(--accent-soft); }
+.facts { display: grid; gap: 10px; align-content: start; }
+.fact { display: flex; gap: 16px; align-items: flex-start; padding: 18px 20px; }
+.fact strong { display: block; font-size: 16px; font-weight: 550; letter-spacing: -0.02em; }
+.fact span { font-size: 14px; color: var(--muted); }
+
+/* audit */
+.hlist { padding: 6px 20px; }
+.hitem { display: flex; align-items: center; gap: 14px; padding: 14px 4px; border-bottom: 1px solid #f0f1f4; }
+.hitem:last-child { border-bottom: 0; }
+.hitem .icon-box { width: 36px; height: 36px; border-radius: 10px; }
+.hitem .ic { width: 18px; height: 18px; }
+.hcopy { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.hcopy strong { font-size: 15px; font-weight: 550; letter-spacing: -0.015em; }
+.hcopy span { font-size: 12.5px; color: var(--muted); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side { display: grid; gap: 16px; align-content: start; }
+.export { padding: 24px; }
+.export p { margin: 16px 0 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); overflow-wrap: anywhere; }
+.term { padding: 22px 24px; border-radius: 22px; background: var(--ink); color: #f1f1f1; font-family: var(--font-mono); font-size: 14.5px; line-height: 1.8; overflow-x: auto; }
+.term .dim { color: #8b8b8b; }
+.term .okc { color: #86efac; }
+
+/* stack */
+.stack { display: flex; flex-wrap: wrap; gap: 10px; }
+.stack .badge { padding: 8px 16px; font-size: 14px; background: var(--paper); }
+
+/* closing */
+.closing { padding: 120px 0 64px; text-align: center; }
+.closing .orb { width: 120px; margin: 0 auto 36px; box-shadow: 0 0 60px 6px rgb(120 110 255 / 0.22); }
+.closing .wordmark { font-size: clamp(34px, 6vw, 64px); margin-right: -0.3em; }
+.closing p.tag { margin: 22px 0 0; font-size: clamp(24px, 3.4vw, 40px); font-weight: 550; letter-spacing: -0.045em; }
+.closing p.tag span { color: var(--muted); }
+.closing .cta { justify-content: center; }
+.run-cmd { display: inline-block; margin-top: 28px; padding: 12px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); font-family: var(--font-mono); font-size: 13.5px; color: var(--ink-soft); text-align: left; max-width: 100%; overflow-x: auto; }
+
+footer { padding: 28px 0 40px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; }
+
+/* reveal on scroll */
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
+.reveal.in { opacity: 1; transform: none; }
+
+@media (max-width: 1000px) {
+  .hero-grid { grid-template-columns: minmax(0, 1fr); }
+  .pillars-grid { grid-template-columns: repeat(2, 1fr); }
+  .pipeline { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 26px; }
+  .pstep:nth-child(4n)::after { display: none; }
+  .split { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .wrap { padding: 0 16px; }
+  .nav-links .hide-sm { display: none; }
+  .brand-sub { display: none; }
+  .hero { padding-top: 44px; }
+  section.block { padding-top: 72px; }
+  .pillars-grid, .threats, .steps3 { grid-template-columns: minmax(0, 1fr); }
+  .pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 22px 18px; }
+  .pstep::after { display: none; }
+  .threat { padding: 24px 22px; }
+  .block-head { flex-direction: column; align-items: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .orb { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-agent" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4"/><circle cx="12" cy="12" r="8.6" stroke-dasharray="2.4 3.2"/><circle cx="20.6" cy="12" r="1.3"/><circle cx="5.9" cy="5.9" r="1.3"/><circle cx="7.7" cy="19.5" r="1.3"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6.5 2.8h7.6l4.4 4.4v14H6.5z"/><path d="M14 2.8v4.5h4.5"/><path d="M9.3 12h6.4M9.3 15.6h6.4"/></symbol>
+    <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.8"/><path d="M14.6 9.1c-.6-.8-1.5-1.2-2.7-1.2-1.5 0-2.6.8-2.6 2s1.1 1.6 2.7 2 2.9.9 2.9 2.2-1.2 2.1-2.9 2.1c-1.2 0-2.3-.5-2.9-1.4M12 6.3v1.6M12 16.2v1.5"/></symbol>
+    <symbol id="i-api" viewBox="0 0 24 24"><path d="M7.5 6.5 3 12l4.5 5.5M16.5 6.5 21 12l-4.5 5.5M13.6 4.5l-3.2 15"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.6l4.6 4.6L19.2 7.6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.2" r="3.8"/><path d="M4.8 20.2a7.2 7.2 0 0 1 14.4 0"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.8 12s3.3-6.2 9.2-6.2 9.2 6.2 9.2 6.2-3.3 6.2-9.2 6.2S2.8 12 2.8 12z"/><circle cx="12" cy="12" r="2.8"/><path d="M4 20 20 4"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.2l1.9 5.4 5.4 1.9-5.4 1.9L12 17.8l-1.9-5.4-5.4-1.9 5.4-1.9z"/><path d="M18.6 15.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6h14M5 10.5h14M5 15h9M5 19.5h6"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.8" cy="6.5" r="1"/><circle cx="4.8" cy="12" r="1"/><circle cx="4.8" cy="17.5" r="1"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.8 12 15.2l4.5-4.4M5 19.5h14"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.6 21.2 19.6H2.8z"/><path d="M12 10v4.4M12 17.2h.01"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 19.5 6v5.6c0 4.5-3.1 8.1-7.5 9.4-4.4-1.3-7.5-4.9-7.5-9.4V6z"/></symbol>
+    <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="Contral home"><span class="wordmark">Contral</span><span class="brand-sub">AI control layer</span></a>
+    <nav class="nav-links" aria-label="Sections">
+      <a class="hide-sm" href="#dashboard">Dashboard</a>
+      <a class="hide-sm" href="#how">How it works</a>
+      <a class="hide-sm" href="#threats">Threats</a>
+      <a class="hide-sm" href="#policy">Policy</a>
+      <a class="hide-sm" href="#audit">Audit</a>
+      <a class="btn btn-primary btn-sm" href="https://github.com/SzymonTyburczy/GoldmanSachsHackaton" target="_blank" rel="noopener"><svg class="ic" aria-hidden="true"><use href="#i-github"/></svg>GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <!-- Hero -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="eyebrow">AI control layer</p>
+        <h1>Move fast.<br><span>Stay in Control.</span></h1>
+        <p class="lede">Contral sits between AI agents and everything they touch. Every request is checked for access, sensitive data, hidden instructions and spend, and every decision is logged.</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="https://github.com/SzymonTyburczy/GoldmanSachsHackaton" target="_blank" rel="noopener"><svg class="ic" aria-hidden="true"><use href="#i-github"/></svg>View on GitHub</a>
+          <a class="btn btn-secondary" href="#how">How it works<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        </div>
+      </div>
+
+      <div class="scene-wrap" aria-label="Animation: requests from agents pass through Contral; safe requests reach models, data and tools, unsafe ones are blocked." role="img">
+        <div class="scene" id="scene">
+          <svg viewBox="0 0 760 520" aria-hidden="true">
+            <path class="wire" id="sw0"/><path class="wire" id="sw1"/><path class="wire" id="sw2"/>
+            <path class="head" d="M578 114 L588 120 L578 126"/>
+            <path class="head" d="M578 254 L588 260 L578 266"/>
+            <path class="head" d="M578 394 L588 400 L578 406"/>
+            <g id="pk"></g>
+          </svg>
+          <div class="snode" style="left:0; top:calc(226 * var(--u)); width:calc(170 * var(--u)); height:calc(68 * var(--u))"><span class="icon-box" data-tone="ink"><svg class="ic"><use href="#i-agent"/></svg></span>Agents</div>
+          <div class="sgate" id="sgate">
+            <div class="orb"></div>
+            <div class="wordmark">Contral</div>
+            <div class="sgate-tags"><span class="badge">Rules</span><span class="badge accent">AI</span></div>
+          </div>
+          <div class="scount"><span class="badge bad"><svg class="ic"><use href="#i-x"/></svg>Blocked&nbsp;<b id="scount">0</b></span></div>
+          <div class="snode sd" style="left:calc(592 * var(--u)); top:calc(86 * var(--u)); width:calc(168 * var(--u)); height:calc(68 * var(--u))"><span class="icon-box"><svg class="ic"><use href="#i-spark"/></svg></span>AI models</div>
+          <div class="snode sd" style="left:calc(592 * var(--u)); top:calc(226 * var(--u)); width:calc(168 * var(--u)); height:calc(68 * var(--u))"><span class="icon-box"><svg class="ic"><use href="#i-doc"/></svg></span>Client data</div>
+          <div class="snode sd" style="left:calc(592 * var(--u)); top:calc(366 * var(--u)); width:calc(168 * var(--u)); height:calc(68 * var(--u))"><span class="icon-box"><svg class="ic"><use href="#i-api"/></svg></span>Tools &amp; APIs</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pillars -->
+  <section class="pillars">
+    <div class="wrap pillars-grid">
+      <div class="card pillar reveal"><span class="icon-box" data-tone="ink"><svg class="ic"><use href="#i-lock"/></svg></span><div><strong>Access</strong><span>Blocked before it's read</span></div></div>
+      <div class="card pillar reveal"><span class="icon-box" data-tone="accent"><svg class="ic"><use href="#i-eye"/></svg></span><div><strong>Data</strong><span>Masked locally</span></div></div>
+      <div class="card pillar reveal"><span class="icon-box"><svg class="ic"><use href="#i-coin"/></svg></span><div><strong>Budget</strong><span>Reserved before every call</span></div></div>
+      <div class="card pillar reveal"><span class="icon-box"><svg class="ic"><use href="#i-list"/></svg></span><div><strong>Audit</strong><span>Every decision, exportable</span></div></div>
+    </div>
+  </section>
+
+  <!-- Dashboard -->
+  <section class="block" id="dashboard">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <div>
+          <p class="eyebrow">The dashboard</p>
+          <h2>Every AI action. A clear story.</h2>
+          <p class="lede">Pick a scenario, follow every checkpoint, explore what was recorded.</p>
+        </div>
+      </div>
+
+      <figure class="shot fade reveal">
+        <div class="shot-bar"><i></i><i></i><i></i><span>127.0.0.1:8000 · operator dashboard</span></div>
+        <img src="/img/dash-workspace.webp" width="1360" height="1095" loading="lazy" decoding="async" alt="Contral dashboard: a list of demo scenarios, the safe summary scenario, a six-step request pipeline from request to output, and the request history with allowed and blocked requests.">
+      </figure>
+
+      <div class="steps3">
+        <div class="card step reveal"><span class="num">01</span><div><strong>Choose a scenario</strong><span>Safe summary, PII, prompt injection, client boundary, tampered artifact</span></div></div>
+        <div class="card step reveal"><span class="num">02</span><div><strong>Follow the request</strong><span>Six checkpoints, each with its own decision</span></div></div>
+        <div class="card step reveal"><span class="num">03</span><div><strong>Explore the history</strong><span>Every request with its audit trail and JSONL export</span></div></div>
+      </div>
+
+      <div class="ops">
+        <div class="ops-head reveal">
+          <h3>Operator view</h3>
+          <div class="ops-tags"><span class="badge">Budget &amp; reservations</span><span class="badge">Denials by reason</span><span class="badge">Adapter latency</span><span class="badge">Live policy editor</span><span class="badge">Saved test reports</span></div>
+        </div>
+        <figure class="shot ops-shot reveal">
+          <div class="shot-bar"><i></i><i></i><i></i><span>Operator settings</span></div>
+          <img src="/img/dash-operator.webp" width="969" height="878" loading="lazy" decoding="async" alt="Operator settings: budget spent, reserved and remaining with cost by purpose; controls with outcomes, denials by reason and adapter latency; the policy editor with validate and activate; saved benchmark and Jev evaluation reports.">
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="block" id="how">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <div>
+          <p class="eyebrow">How it works</p>
+          <h2>Rules decide. AI assists.</h2>
+          <p class="lede">Deterministic checks run first. The AI detector can only add a denial, never grant access.</p>
+        </div>
+      </div>
+
+      <ol class="card pipeline reveal">
+        <li class="pstep"><span class="icon-box" data-tone="ok"><svg class="ic"><use href="#i-user"/></svg></span><strong>Identity</strong><span>Role and client from the server, not the agent</span></li>
+        <li class="pstep"><span class="icon-box" data-tone="ok"><svg class="ic"><use href="#i-lock"/></svg></span><strong>Access</strong><span>Checked before any document is read</span></li>
+        <li class="pstep"><span class="icon-box" data-tone="accent"><svg class="ic"><use href="#i-eye"/></svg></span><strong>Privacy</strong><span>Fields removed, PII and secrets masked</span></li>
+        <li class="pstep"><span class="icon-box" data-tone="ok"><svg class="ic"><use href="#i-spark"/></svg></span><strong>AI risk</strong><span>Injection and exfiltration scored</span></li>
+        <li class="pstep"><span class="icon-box" data-tone="ok"><svg class="ic"><use href="#i-coin"/></svg></span><strong>Budget</strong><span>Cost reserved atomically</span></li>
+        <li class="pstep"><span class="icon-box" data-tone="ok"><svg class="ic"><use href="#i-text"/></svg></span><strong>Model</strong><span>Runs only if every check passes</span></li>
+        <li class="pstep"><span class="icon-box"><svg class="ic"><use href="#i-list"/></svg></span><strong>Audit</strong><span>Decision and actual effect recorded</span></li>
+      </ol>
+
+      <div class="card redact reveal" id="redact" data-speed="22">
+        <div class="redact-head">
+          <span class="swap"><span class="badge hdr-a"><svg class="ic"><use href="#i-agent"/></svg>Prompt</span><span class="badge accent hdr-b"><svg class="ic"><use href="#i-eye"/></svg>Sent to model</span></span>
+          <span class="badge accent mask-count">Masked locally · 3</span>
+        </div>
+        <p class="typed" id="typed"></p>
+      </div>
+      <p class="redact-note reveal">Local Presidio plus a dedicated secret rule. Masking happens before any provider call, including token counting. If the engine is down, nothing leaves.</p>
+    </div>
+  </section>
+
+  <!-- Threats -->
+  <section class="block" id="threats">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <div>
+          <p class="eyebrow">Threats it stops</p>
+          <h2>Four ways AI goes wrong.</h2>
+        </div>
+      </div>
+      <div class="threats">
+        <article class="card threat reveal">
+          <div class="threat-top"><span class="icon-box" data-tone="bad"><svg class="ic"><use href="#i-lock"/></svg></span><span class="badge bad mono">CLIENT_FORBIDDEN</span></div>
+          <h3>Another client's file?</h3>
+          <p class="verdict">Blocked before it's read.</p>
+          <p class="detail">Identity, role and client scope come from verified server state. The document adapter is never called.</p>
+        </article>
+        <article class="card threat reveal">
+          <div class="threat-top"><span class="icon-box" data-tone="bad"><svg class="ic"><use href="#i-spark"/></svg></span><span class="badge bad mono">SEMANTIC_RISK</span></div>
+          <h3>A hidden instruction?</h3>
+          <p class="verdict">Caught. The summary never runs.</p>
+          <p class="detail">TypeSafe Jev scores instruction override and data exfiltration. Above the threshold, or if the detector fails, generation stops.</p>
+        </article>
+        <article class="card threat reveal">
+          <div class="threat-top"><span class="icon-box" data-tone="bad"><svg class="ic"><use href="#i-coin"/></svg></span><span class="badge bad mono">BUDGET_EXCEEDED</span></div>
+          <h3>A runaway loop?</h3>
+          <p class="verdict">Stopped at the budget.</p>
+          <p class="detail">Atomic reservations per task, user and globally. In our test, 20 parallel requests with budget for 5: exactly 5 run.</p>
+          <div class="grid20" aria-hidden="true"><i class="ran"></i><i class="ran"></i><i class="ran"></i><i class="ran"></i><i class="ran"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </article>
+        <article class="card threat reveal">
+          <div class="threat-top"><span class="icon-box" data-tone="bad"><svg class="ic"><use href="#i-doc"/></svg></span><span class="badge bad mono">ARTIFACT_BLOCKED</span></div>
+          <h3>A poisoned model file?</h3>
+          <p class="verdict">Rejected by the threat feed.</p>
+          <p class="detail">Trusted SHA-256 manifest, a hash threat feed and strict JSON. Altered or pickle-like files are never deserialized.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Policy -->
+  <section class="block" id="policy">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <div>
+          <p class="eyebrow">One central policy</p>
+          <h2>Tighten a rule. It applies instantly.</h2>
+        </div>
+      </div>
+      <div class="split">
+        <div class="card editor reveal">
+          <div class="editor-head"><span>config/policy.json</span><span class="badge ok">validated</span></div>
+<pre class="code">{
+  <span class="k">"semantic"</span>: {
+    <span class="hl"><span class="k">"block_threshold"</span>: 0.8,</span>
+    <span class="k">"on_error"</span>: <span class="s">"deny"</span>
+  },
+  <span class="k">"models"</span>: {
+    <span class="k">"allowed"</span>: [<span class="s">"jev-1.13.0"</span>, <span class="s">"gpt-6-luna"</span>]
+  },
+  <span class="k">"resources"</span>: {
+    <span class="k">"max_requests_per_minute_per_principal"</span>: 30
+  },
+  <span class="k">"budget"</span>: {
+    <span class="k">"global_limit_nusd"</span>: 500000000
+  }
+}</pre>
+        </div>
+        <div class="facts">
+          <div class="card fact reveal"><span class="icon-box" data-tone="accent"><svg class="ic"><use href="#i-sliders"/></svg></span><div><strong>Versioned</strong><span>Policy and threat feed live in SQLite with full history.</span></div></div>
+          <div class="card fact reveal"><span class="icon-box" data-tone="ok"><svg class="ic"><use href="#i-check"/></svg></span><div><strong>Validated</strong><span>A broken update is rejected. The last valid version stays active.</span></div></div>
+          <div class="card fact reveal"><span class="icon-box" data-tone="bad"><svg class="ic"><use href="#i-shield"/></svg></span><div><strong>Fails closed</strong><span>Detector down, PII engine missing or no config: protected calls are denied.</span></div></div>
+          <div class="card fact reveal"><span class="icon-box"><svg class="ic"><use href="#i-coin"/></svg></span><div><strong>Honest costs</strong><span>A timeout never erases an uncertain charge. It stays reserved.</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Audit -->
+  <section class="block" id="audit">
+    <div class="wrap">
+      <div class="block-head reveal">
+        <div>
+          <p class="eyebrow">Security reporting</p>
+          <h2>Every decision logged.</h2>
+          <p class="lede">For security teams and management alike. The audit separates the decision from what actually executed, adapter by adapter.</p>
+        </div>
+      </div>
+      <div class="split">
+        <div class="card hlist reveal">
+          <div class="hitem"><span class="icon-box" data-tone="accent"><svg class="ic"><use href="#i-eye"/></svg></span><div class="hcopy"><strong>Summarize client document</strong><span>documents.summarize · PII_REDACTED</span></div><span class="badge accent">Redacted</span></div>
+          <div class="hitem"><span class="icon-box" data-tone="bad"><svg class="ic"><use href="#i-lock"/></svg></span><div class="hcopy"><strong>Read another client's file</strong><span>documents.read · CLIENT_FORBIDDEN</span></div><span class="badge bad">Blocked</span></div>
+          <div class="hitem"><span class="icon-box" data-tone="bad"><svg class="ic"><use href="#i-spark"/></svg></span><div class="hcopy"><strong>Hidden instruction</strong><span>documents.summarize · SEMANTIC_RISK</span></div><span class="badge bad">Blocked</span></div>
+          <div class="hitem"><span class="icon-box" data-tone="bad"><svg class="ic"><use href="#i-coin"/></svg></span><div class="hcopy"><strong>Over budget</strong><span>documents.summarize · BUDGET_EXCEEDED</span></div><span class="badge bad">Blocked</span></div>
+          <div class="hitem"><span class="icon-box" data-tone="bad"><svg class="ic"><use href="#i-doc"/></svg></span><div class="hcopy"><strong>Tampered artifact</strong><span>artifacts.admit · ARTIFACT_BLOCKED</span></div><span class="badge bad">Blocked</span></div>
+          <div class="hitem"><span class="icon-box"><svg class="ic"><use href="#i-sliders"/></svg></span><div class="hcopy"><strong>Policy update</strong><span>admin · validated and activated</span></div><span class="badge">New version</span></div>
+        </div>
+        <div class="side">
+          <div class="card export reveal">
+            <span class="btn btn-primary"><svg class="ic"><use href="#i-download"/></svg>Export audit · JSONL</span>
+            <p>{"principal_id":"analyst-a","tool":"documents.read","decision":"DENY","reason_code":"CLIENT_FORBIDDEN","execution_status":…}</p>
+          </div>
+          <div class="term reveal">
+            <span class="dim">$</span> make test<br>
+            <span class="okc">✓ allowed cases pass</span><br>
+            <span class="okc">✓ blocked cases stay blocked</span><br>
+            <span class="dim">Positive and negative tests. Run them yourself.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stack -->
+  <section class="block" id="stack">
+    <div class="wrap">
+      <div class="block-head reveal"><div><p class="eyebrow">Under the hood</p><h2>Small, auditable stack.</h2></div></div>
+      <div class="stack reveal">
+        <span class="badge">Python 3.12</span><span class="badge">FastAPI</span><span class="badge">Pydantic 2</span><span class="badge">SQLite</span>
+        <span class="badge accent">Presidio + spaCy (local)</span><span class="badge accent">TypeSafe Jev</span><span class="badge accent">OpenAI gpt-6-luna</span>
+        <span class="badge">uv · pytest · Ruff</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Closing -->
+  <section class="closing">
+    <div class="wrap reveal">
+      <div class="orb"></div>
+      <div class="wordmark">Contral</div>
+      <p class="tag">Move fast. <span>Stay in Control.</span></p>
+      <div class="cta"><a class="btn btn-primary" href="https://github.com/SzymonTyburczy/GoldmanSachsHackaton" target="_blank" rel="noopener"><svg class="ic" aria-hidden="true"><use href="#i-github"/></svg>View on GitHub</a></div>
+      <div class="run-cmd">git clone https://github.com/SzymonTyburczy/GoldmanSachsHackaton.git<br>cd GoldmanSachsHackaton &amp;&amp; make setup &amp;&amp; make dev</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>Contral · AI control layer · Built for the Goldman Sachs challenge at HackYeah 2026.</span>
+    <span>Local single-process demo, not production-ready. All demo data is synthetic.</span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Reveal on scroll.
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }, { threshold: 0.12 });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+  // Hero scene: blue requests pass through Contral, red ones are blocked at the gate.
+  (() => {
+    const NS = "http://www.w3.org/2000/svg";
+    const layer = document.getElementById("pk");
+    const wires = [0, 1, 2].map((i) => document.getElementById(`sw${i}`));
+    const gate = document.getElementById("sgate");
+    const countEl = document.getElementById("scount");
+    const dests = [...document.querySelectorAll(".sd")];
+    const Y = 260, AX = 170, GIN = 265, GOUT = 495, DX = 588, DY = [120, 260, 400], SPEED = 250;
+    const lerp = (a, b, f) => a + (b - a) * f;
+    let blocked = 0, packets = [], last = performance.now(), spawnAt = last + 600, visible = true;
+
+    const curves = DY.map((dy, k) => {
+      const c = (DX - GOUT) * 0.5;
+      const P = [[GOUT, Y], [GOUT + c, Y], [DX - c, dy], [DX, dy]];
+      wires[k].setAttribute("d", `M${AX} ${Y} L${GIN} ${Y} M${GOUT} ${Y} C${P[1][0]} ${P[1][1]} ${P[2][0]} ${P[2][1]} ${DX} ${dy}`);
+      const pts = [P[0]], cum = [0];
+      for (let i = 1; i <= 24; i++) {
+        const u = i / 24, v = 1 - u;
+        const q = [0, 1].map((j) => v * v * v * P[0][j] + 3 * v * v * u * P[1][j] + 3 * v * u * u * P[2][j] + u * u * u * P[3][j]);
+        cum.push(cum[i - 1] + Math.hypot(q[0] - pts[i - 1][0], q[1] - pts[i - 1][1]));
+        pts.push(q);
+      }
+      return { pts, cum, len: cum[24] };
+    });
+
+    function along(c, d) {
+      if (d >= c.len) return c.pts[24];
+      let i = 1;
+      while (c.cum[i] < d) i++;
+      const f = (d - c.cum[i - 1]) / (c.cum[i] - c.cum[i - 1]);
+      return [lerp(c.pts[i - 1][0], c.pts[i][0], f), lerp(c.pts[i - 1][1], c.pts[i][1], f)];
+    }
+
+    function flash(node) {
+      node.classList.add("hit");
+      clearTimeout(node._hit);
+      node._hit = setTimeout(() => node.classList.remove("hit"), 280);
+    }
+
+    function spawn() {
+      const red = Math.random() < 0.32;
+      const color = red ? "#d4342c" : "#3d5afe";
+      const g = document.createElementNS(NS, "g");
+      const halo = document.createElementNS(NS, "circle");
+      const core = document.createElementNS(NS, "circle");
+      halo.setAttribute("r", "10");
+      halo.setAttribute("fill", color);
+      halo.setAttribute("fill-opacity", "0.16");
+      core.setAttribute("r", "6");
+      core.setAttribute("fill", color);
+      g.append(halo, core);
+      layer.append(g);
+      packets.push({ k: Math.floor(Math.random() * 3), red, d: 0, state: "move", g, halo, core });
+    }
+
+    function frame(now) {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (visible && now >= spawnAt) { spawn(); spawnAt = now + 260 + Math.random() * 160; }
+      const L1 = GIN - AX, L2 = GOUT - GIN;
+      for (const p of packets) {
+        const c = curves[p.k];
+        let x, y, alpha = 1;
+        if (p.state === "move") {
+          const inGate = p.d > L1 && p.d < L1 + L2;
+          p.d += dt * SPEED * (inGate ? 2.6 : 1);
+          if (p.red && p.d >= L1 - 4) { p.state = "blocked"; p.at = now; countEl.textContent = ++blocked; flash(gate); }
+          else if (p.d >= L1 + L2 + c.len) { p.state = "arrived"; p.at = now; }
+          else { [x, y] = p.d < L1 ? [AX + p.d, Y] : p.d < L1 + L2 ? [GIN + p.d - L1, Y] : along(c, p.d - L1 - L2); alpha = Math.min(1, p.d / 20); }
+        }
+        if (p.state === "blocked") {
+          const a = Math.min(1, (now - p.at) / 480);
+          [x, y] = [GIN - 4, Y];
+          p.halo.setAttribute("r", String(10 + 20 * a));
+          p.halo.setAttribute("fill-opacity", String(0.3 * (1 - a)));
+          alpha = 1 - a;
+          if (a >= 1) p.dead = true;
+        } else if (p.state === "arrived") {
+          const a = Math.min(1, (now - p.at) / 220);
+          [x, y] = [DX, DY[p.k]];
+          alpha = 1 - a;
+          if (a >= 1) p.dead = true;
+        }
+        if (p.dead) { p.g.remove(); continue; }
+        p.g.setAttribute("transform", `translate(${x} ${y})`);
+        p.core.setAttribute("opacity", String(alpha));
+        if (p.state !== "blocked") p.halo.setAttribute("opacity", String(alpha));
+      }
+      packets = packets.filter((p) => !p.dead);
+      requestAnimationFrame(frame);
+    }
+
+    if (!reduce) {
+      new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(document.getElementById("scene"));
+      requestAnimationFrame(frame);
+    }
+  })();
+
+  // Live redaction: type a prompt, flag sensitive values, mask them in place. Loops while visible.
+  (() => {
+    const box = document.getElementById("redact");
+    const target = document.getElementById("typed");
+    const segments = [
+      { t: "Summarize the client. Contact " },
+      { pii: "jan.kowalski@example.com", ph: "EMAIL_ADDRESS" },
+      { t: " or " },
+      { pii: "+48 601 234 567", ph: "PHONE_NUMBER" },
+      { t: ". API key: " },
+      { pii: "cpdemo_7Hq2Lm9Xa4Rt8Vw3Nb6Kp1Zc", ph: "SECRET" },
+    ];
+    const speed = Number(box.dataset.speed);
+    let timers = [], running = false;
+    const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+
+    function build() {
+      box.classList.remove("detected", "scan", "masked");
+      target.replaceChildren();
+      const parts = [];
+      let n = 0;
+      for (const seg of segments) {
+        if (seg.pii) {
+          const tok = document.createElement("span");
+          tok.className = "tok";
+          tok.style.setProperty("--i", n++);
+          const raw = document.createElement("span");
+          raw.className = "raw";
+          const ph = document.createElement("span");
+          ph.className = "ph";
+          ph.textContent = seg.ph;
+          tok.append(raw, ph);
+          target.append(tok);
+          parts.push([raw, seg.pii]);
+        } else {
+          const span = document.createElement("span");
+          target.append(span);
+          parts.push([span, seg.t]);
+        }
+      }
+      return parts;
+    }
+
+    function play() {
+      if (reduce) {
+        for (const [el, text] of build()) el.textContent = text;
+        box.classList.add("masked");
+        return;
+      }
+      const parts = build();
+      const caret = document.createElement("span");
+      caret.className = "caret";
+      target.append(caret);
+      let part = 0, char = 0;
+      const tick = () => {
+        const [el, text] = parts[part];
+        el.textContent = text.slice(0, ++char);
+        if (char >= text.length) { part++; char = 0; }
+        if (part < parts.length) return later(tick, speed);
+        later(() => { caret.remove(); box.classList.add("detected", "scan"); }, 300);
+        later(() => box.classList.add("masked"), 1000);
+        later(() => { if (running) play(); }, 6000);
+      };
+      later(tick, 400);
+    }
+
+    new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !running) { running = true; play(); }
+      else if (!e.isIntersecting && running) { running = false; timers.forEach(clearTimeout); timers = []; }
+    }, { threshold: 0.4 }).observe(box);
+  })();
+})();
+</script>
+</body>
+</html>

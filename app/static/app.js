@@ -1,6 +1,6 @@
 "use strict";
 
-// ContrAl operator panel. Every value from the server or from inputs is rendered with
+// Contral operator panel. Every value from the server or from inputs is rendered with
 // textContent (via h()), never parsed as HTML. The bearer token lives in this tab's
 // memory only. Typed requests and demo buttons both go through submitRequest().
 
@@ -1125,7 +1125,7 @@ async function blockHash(hash, reason) {
       rule_id: `blk-${hash.slice(0, 12)}`,
       kind: "sha256",
       value: hash,
-      source: "ContrAl admin panel",
+      source: "Contral admin panel",
       reason: reason.replace(/[^A-Za-z0-9 ._:/()-]/g, " ").slice(0, 120).trim() || "Blocked",
       is_test_fixture: false,
     };
