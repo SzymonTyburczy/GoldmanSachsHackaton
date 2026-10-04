@@ -2,6 +2,7 @@
   <img src="assets/readme/contral.svg" alt="ContrAl — AI control layer" width="480">
 </p>
 
+
 <p align="center">
   <strong>Control what your AI can access, share and spend.</strong><br>
   Built for the Goldman Sachs challenge at HackYeah 2026.
