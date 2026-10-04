@@ -5,7 +5,6 @@
 // memory only. Typed requests and demo buttons both go through submitRequest().
 
 const POLL_MS = 2000;
-const REPORTS_POLL_MS = 15000;
 const HISTORY_KEEP = 120;
 const MAX_HISTORY_PAGES = 25;
 
@@ -280,7 +279,6 @@ async function signIn(event) {
   if (state.isAdmin) {
     loadConfig();
     pollLoop(refreshMetrics, POLL_MS);
-    pollLoop(refreshReports, REPORTS_POLL_MS);
   }
   pollLoop(refreshHistory, POLL_MS);
 }
@@ -878,76 +876,6 @@ function renderMetrics(metrics) {
   $("controls").replaceChildren(...controls);
 }
 
-// ------------------------------------------------------------------------------ reports
-
-async function refreshReports() {
-  try {
-    renderReports(await api("GET", "/admin/test-results"));
-  } catch (error) {
-    if (error instanceof HttpError && error.status === 401) signOut();
-  }
-}
-
-const REPORT_TITLES = {
-  "jev-evaluation": "Jev held-out evaluation",
-  "benchmark-offline": "Offline component benchmark",
-  "benchmark-live": "Live provider benchmark",
-};
-
-function renderReports(results) {
-  const nodes = [];
-  if (!results.reports.length) {
-    nodes.push(
-      h(
-        "div",
-        { class: "empty" },
-        h("p", { class: "empty-title", text: "No saved reports" }),
-        h("p", { class: "empty-desc", text: "Run make test-live or make benchmark to record one." }),
-      ),
-    );
-  }
-  for (const report of results.reports) {
-    const verdict =
-      report.passed === null ? badge("no pass criterion", "muted") : badge(report.passed ? "passed" : "failed", report.passed ? "ok" : "bad");
-    const commit = report.git_commit
-      ? badge(report.matches_current_commit ? "current commit" : `older commit ${report.git_commit.slice(0, 7)}`, report.matches_current_commit ? "ok" : "warn")
-      : badge("commit unknown", "warn");
-    const details = [`${report.sample_count ?? "—"} samples`];
-    if (report.false_positives !== null) details.push(`${report.false_positives} false positives`);
-    if (report.false_negatives !== null) details.push(`${report.false_negatives} false negatives`);
-    if (report.errors !== null) details.push(`${report.errors} errors`);
-    nodes.push(
-      h(
-        "div",
-        { class: "notice" },
-        h(
-          "div",
-          { class: "decision-line" },
-          h("p", { class: "notice-title", text: REPORT_TITLES[report.kind] || report.kind }),
-          badge(report.mode, report.mode === "live" ? "accent" : "neutral"),
-          verdict,
-          commit,
-        ),
-        h("p", {
-          class: "notice-desc",
-          text: `${report.recorded_at ? new Date(report.recorded_at).toLocaleString() : "time unknown"} · ${details.join(" · ")}`,
-        }),
-        h("p", { class: "field-hint mono", text: report.file }),
-      ),
-    );
-  }
-  nodes.push(
-    notice(
-      "warn",
-      "Offline test suite not recorded",
-      "make test prints its result but saves no report, so it is not shown here.",
-    ),
-  );
-  if (results.unreadable_files) {
-    nodes.push(notice("bad", `${results.unreadable_files} report file(s) could not be read`, "They are not shown."));
-  }
-  $("tests").replaceChildren(...nodes);
-}
 
 // ------------------------------------------------------------------------------ config
 
