@@ -1,0 +1,20 @@
+[confident product-launch narrator, warm, steady pace] AI agents move fast. They read client data, call internal tools... and spend real money.
+[lower, serious] One hidden instruction can turn that speed against you.
+[pause]
+[confident, upbeat] Control sits between your agents and everything they touch: cloud and local models, MCP tools, internal APIs.
+[clear, measured] Rules and AI inspect every request, in real time.
+[pause]
+[conversational] An agent asks for a summary.
+[reassuring] Access is verified, and sensitive data is masked before it leaves your network.
+[pause]
+[curious, snappy] Another client's file? [firm] Blocked before it's read.
+[curious, snappy] A hidden instruction? [firm] Caught. The summary never runs.
+[curious, snappy] A runaway loop? [firm] Stopped at the budget.
+[curious, snappy] A poisoned model file? [firm] Rejected by the threat feed.
+[pause]
+[confident] Tighten a threshold, and the very next request obeys it.
+[pause]
+[clear, authoritative] Every decision is logged and exportable, for security teams and management alike.
+[proud] And every control is proven by tests you can run yourself.
+[long pause]
+[confident, slower, warm] Control. [pause] Move fast. [pause] Stay in control.
