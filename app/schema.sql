@@ -1,6 +1,7 @@
--- ControlProof SQLite schema, version 1 (PRAGMA user_version).
+-- ControlProof SQLite schema, version 2 (PRAGMA user_version).
 -- Times are UTC ISO 8601 strings, IDs are UUID strings, amounts and counters are integers.
--- No table stores request bodies, prompts, documents, access tokens or raw SDK errors.
+-- No table stores raw request bodies, prompts, documents, tokens or SDK errors.
+-- human_reviews stores only masked inputs for a bounded review continuation.
 
 -- Validated policy/feed versions. Files in config/ only seed or import these rows.
 CREATE TABLE IF NOT EXISTS config_versions (
@@ -114,3 +115,15 @@ BEFORE DELETE ON audit_events
 BEGIN
     SELECT RAISE(ABORT, 'audit_events is append-only');
 END;
+
+-- One durable review per original request. No raw prompt/document values.
+CREATE TABLE IF NOT EXISTS human_reviews (
+    request_id TEXT PRIMARY KEY REFERENCES requests (request_id),
+    context_json TEXT NOT NULL,
+    safe_request_json TEXT NOT NULL,
+    input_sha256 TEXT NOT NULL CHECK (length(input_sha256) = 64),
+    review_json TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN
+        ('PENDING', 'RUNNING', 'APPROVED', 'BLOCKED', 'EXPIRED', 'STALE', 'UNKNOWN'))
+);
+CREATE INDEX IF NOT EXISTS human_reviews_by_state ON human_reviews (state);

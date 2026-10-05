@@ -102,6 +102,7 @@ class Decision(StrEnum):
     ALLOW = "ALLOW"
     DENY = "DENY"
     REDACT = "REDACT"
+    REQUIRE_APPROVAL = "REQUIRE_APPROVAL"
 
 
 class ReasonCode(StrEnum):
@@ -115,6 +116,13 @@ class ReasonCode(StrEnum):
     TOOL_FORBIDDEN = "TOOL_FORBIDDEN"
     PII_REDACTED = "PII_REDACTED"
     SEMANTIC_RISK = "SEMANTIC_RISK"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    REVIEW_FORBIDDEN = "REVIEW_FORBIDDEN"
+    REVIEW_RESOLVED = "REVIEW_RESOLVED"
+    REVIEW_EXPIRED = "REVIEW_EXPIRED"
+    REVIEW_STALE = "REVIEW_STALE"
+    HUMAN_APPROVED = "HUMAN_APPROVED"
+    HUMAN_BLOCKED = "HUMAN_BLOCKED"
     DETECTOR_UNAVAILABLE = "DETECTOR_UNAVAILABLE"
     PII_ENGINE_UNAVAILABLE = "PII_ENGINE_UNAVAILABLE"
     BUDGET_EXCEEDED = "BUDGET_EXCEEDED"
@@ -158,6 +166,7 @@ class ControlId(StrEnum):
     SEMANTIC = "semantic"
     BUDGET = "budget"
     ARTIFACTS = "artifacts"
+    HUMAN_REVIEW = "human_review"
 
 
 class Tool(StrEnum):
@@ -371,6 +380,7 @@ class AuditEvent(StrictModel):
     redacted_fields: tuple[FieldName, ...] = ()
     redacted_entity_counts: dict[EntityType, PositiveInt] = Field(default_factory=dict)
     semantic: SemanticResult | None = None
+    reviewer_id: Identifier | None = None
 
 
 # --------------------------------------------------------------------------------------
@@ -459,9 +469,22 @@ class ExecuteResponse(StrictModel):
     redacted_fields: tuple[FieldName, ...] = ()
     usage: tuple[Usage, ...] = ()
     audit_event_ids: tuple[UUID, ...] = ()
+    review_id: UUID | None = None
 
     @model_validator(mode="after")
     def _check_decision(self) -> Self:
+        if self.decision is Decision.REQUIRE_APPROVAL:
+            if (
+                self.output is not None
+                or self.review_id is None
+                or self.reason_code is not ReasonCode.REVIEW_REQUIRED
+                or self.adapter_calls.summary is not ExecutionStatus.NOT_CALLED
+                or self.adapter_calls.token_count is not ExecutionStatus.NOT_CALLED
+            ):
+                raise ValueError("pending review requires an ID and no output or summary calls")
+            return self
+        if self.review_id is not None:
+            raise ValueError("only pending responses carry review_id")
         if self.decision is Decision.DENY:
             if self.output is not None:
                 raise ValueError("DENY must not carry output")
@@ -529,3 +552,38 @@ class HealthResponse(StrictModel):
     policy_version: ConfigVersion | None
     feed_version: ConfigVersion | None
     protected_operations: Literal["enabled", "disabled"]
+
+
+class ReviewDecisionRequest(StrictModel):
+    schema_version: SchemaVersion
+    decision: Literal["approve", "block"]
+
+
+class HumanReview(StrictModel):
+    schema_version: SchemaVersion = SCHEMA_VERSION
+    review_id: UUID
+    request_id: UUID
+    task_id: UUID
+    principal_id: Identifier
+    agent_id: Identifier
+    client_id: Identifier
+    tool: Tool
+    document_id: Identifier
+    policy_version: ConfigVersion
+    feed_version: ConfigVersion
+    risk_score: Probability
+    review_threshold: Probability
+    block_threshold: Probability
+    status: Literal["PENDING", "RUNNING", "APPROVED", "BLOCKED", "EXPIRED", "STALE", "UNKNOWN"]
+    created_at: UtcDatetime
+    expires_at: UtcDatetime
+    reviewer_id: Identifier | None = None
+    decided_at: UtcDatetime | None = None
+    masked_prompt: str | None = None
+    masked_document: str
+    result_reason_code: ReasonCode | None = None
+
+
+class HumanReviewPage(StrictModel):
+    schema_version: SchemaVersion = SCHEMA_VERSION
+    reviews: tuple[HumanReview, ...]

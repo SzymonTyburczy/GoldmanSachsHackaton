@@ -158,6 +158,7 @@ class RequestTrail:
         entity_counts: Mapping[str, int] | None = None,
         usage: tuple[Usage, ...] = (),
         semantic: SemanticResult | None = None,
+        reviewer_id: str | None = None,
     ) -> None:
         """Store the outcome of one step.
 
@@ -193,6 +194,7 @@ class RequestTrail:
             redacted_fields=result.redacted_fields,
             redacted_entity_counts=dict(entity_counts or {}),
             semantic=semantic,
+            reviewer_id=reviewer_id,
         )
         append(self._db_path, event)
         self.calls = calls

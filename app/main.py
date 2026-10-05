@@ -14,7 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import budget, db
+from app import budget, db, reviews
 from app.adapters.artifacts import ArtifactManifest, ArtifactStore
 from app.adapters.documents import DocumentAdapter, DocumentCatalog
 from app.adapters.providers import Providers
@@ -80,6 +80,7 @@ def create_app(settings: Settings | None = None, providers: Providers | None = N
         # Reservations and requests left open by a stopped process may have reached a
         # provider: they become UNKNOWN and keep their amounts (section 7).
         stranded = budget.reconcile_after_restart(settings.db_path)
+        reviews.reconcile(settings.db_path)
         if stranded:
             logger.warning("%d open reservations marked UNKNOWN after restart", stranded)
         # Load the spaCy pipelines now rather than on the first request. A failure is not

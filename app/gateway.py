@@ -39,7 +39,7 @@ from uuid import UUID
 import httpx
 import openai
 
-from app import budget, db, idempotency, policy, provider_calls
+from app import budget, db, idempotency, policy, provider_calls, reviews
 from app.adapters.artifacts import (
     ArtifactManifest,
     ArtifactReadError,
@@ -71,6 +71,7 @@ from app.contracts import (
     ExecutionStatus,
     ReasonCode,
     RequestContext,
+    Role,
     SemanticResult,
     Stage,
     SummaryOutput,
@@ -152,6 +153,115 @@ class Gateway:
         self._complete(context, response)
         return response
 
+    def response_for(self, principal: Principal, request_id: UUID) -> ExecuteResponse:
+        response = reviews.get_response(self._db_path, principal, request_id)
+        if response.output is None:
+            return response
+        with closing(db.connect(self._db_path)) as conn:
+            row = conn.execute(
+                "SELECT tool FROM requests WHERE request_id = ?", (str(request_id),)
+            ).fetchone()
+            task = get_task(conn, response.task_id)
+            try:
+                active = policy.load_active(conn, "policy")
+                active_feed = policy.load_active(conn, "feed")
+            except policy.StoredConfigError:
+                active = active_feed = None
+        if task is None or active is None or active_feed is None:
+            raise ApiError(503, ReasonCode.INVALID_CONFIG)
+        context = RequestContext(
+            request_id=request_id,
+            task_id=task.task_id,
+            principal_id=task.principal_id,
+            agent_id=task.agent_id,
+            role=principal.role,
+            client_id=task.client_id,
+            policy_version=active.version,
+            feed_version=active_feed.version,
+            created_at=utc_now(),
+        )
+        trail = RequestTrail(self._db_path, request_id, principal, Tool(row["tool"]))
+        trail.task_id, trail.client_id = task.task_id, task.client_id
+        trail.policy_version, trail.feed_version = active.version, active_feed.version
+        trail.calls = response.adapter_calls
+        try:
+            return self._replay(trail, context, active.document, active_feed.document, response)
+        except AuditUnavailableError:
+            raise ApiError(503, ReasonCode.AUDIT_UNAVAILABLE) from None
+
+    async def decide_review(
+        self, reviewer: Principal, review_id: UUID, decision: str
+    ) -> reviews.HumanReview:
+        # Check permission before loading configuration or claiming the request.
+        item = reviews.get_review(self._db_path, reviewer, review_id)
+        if not reviews.can_review(reviewer, item):
+            raise ApiError(403, ReasonCode.REVIEW_FORBIDDEN)
+        with closing(db.connect(self._db_path)) as conn:
+            versions = policy.active_versions(conn)
+            try:
+                current = policy.load_active(conn, "policy")
+                current_feed = policy.load_active(conn, "feed")
+            except policy.StoredConfigError:
+                current = current_feed = None
+        if current is None or current_feed is None:
+            raise ApiError(503, ReasonCode.INVALID_CONFIG)
+        saved = reviews.claim(self._db_path, reviewer, review_id, current.document)
+        context = saved.context
+        origin = Principal(
+            context.principal_id,
+            Role(context.role),
+            context.agent_id,
+            frozenset({context.client_id}),
+        )
+        trail = RequestTrail(self._db_path, context.request_id, origin, Tool(saved.request.tool))
+        trail.task_id, trail.client_id = context.task_id, context.client_id
+        trail.policy_version, trail.feed_version = context.policy_version, context.feed_version
+        trail.calls = saved.pending.adapter_calls
+        trail.event_ids = list(saved.pending.audit_event_ids)
+        trail.usage = list(saved.pending.usage)
+        status = "APPROVED" if decision == "approve" else "BLOCKED"
+        try:
+            with closing(db.connect(self._db_path)) as conn:
+                task = get_task(conn, context.task_id)
+            reason = None
+            if saved.review.expires_at <= utc_now():
+                reason, status = ReasonCode.REVIEW_EXPIRED, "EXPIRED"
+            elif decision == "block":
+                reason = ReasonCode.HUMAN_BLOCKED
+            elif (
+                versions.policy_version != context.policy_version
+                or versions.feed_version != context.feed_version
+                or task is None
+                or task.principal_id != context.principal_id
+                or task.client_id != context.client_id
+                or task.agent_id != context.agent_id
+            ):
+                reason, status = ReasonCode.REVIEW_STALE, "STALE"
+            if reason is not None:
+                trail.record(_human(Decision.DENY, reason), reviewer_id=reviewer.principal_id)
+                response = _denied(context, trail, reason)
+            else:
+                trail.record(
+                    _human(Decision.ALLOW, ReasonCode.HUMAN_APPROVED),
+                    reviewer_id=reviewer.principal_id,
+                )
+                response = await self._run(
+                    trail, context, current.document, current_feed.document, saved.request, saved
+                )
+                if response.reason_code is ReasonCode.REVIEW_STALE:
+                    status = "STALE"
+            idempotency.complete(self._db_path, context.request_id, response)
+            reviews.finish(self._db_path, review_id, status)
+        except AuditUnavailableError:
+            self._abandon(context, trail)
+            reviews.finish(self._db_path, review_id, "UNKNOWN")
+            raise ApiError(503, ReasonCode.AUDIT_UNAVAILABLE) from None
+        except BaseException:
+            self._abandon(context, trail)
+            reviews.finish(self._db_path, review_id, "UNKNOWN")
+            raise
+        return reviews.get_review(self._db_path, reviewer, review_id)
+
     def _admit(
         self,
         trail: RequestTrail,
@@ -207,6 +317,7 @@ class Gateway:
             feed_version=versions.feed_version,
             created_at=utc_now(),
         )
+        reviews.maintain(self._db_path)
         claim = idempotency.claim(
             self._db_path,
             context,
@@ -254,7 +365,7 @@ class Gateway:
         have been blocked by the feed since. A refusal is audited but not stored, so the
         same key returns the stored response again once the rights are back.
         """
-        if response.decision is Decision.DENY:
+        if response.decision in (Decision.DENY, Decision.REQUIRE_APPROVAL):
             return response
         stored: Policy | None = pinned
         if response.policy_version != context.policy_version:
@@ -283,6 +394,7 @@ class Gateway:
         pinned: Policy,
         feed: Feed,
         request: ExecuteRequest,
+        continuation: reviews.Continuation | None = None,
     ) -> ExecuteResponse:
         tool_access = access.check_tool(pinned, context, trail.tool)
         if tool_access.decision is Decision.DENY:
@@ -371,9 +483,38 @@ class Gateway:
             trail.record(_budget(Decision.DENY, ReasonCode.INPUT_TOO_LARGE, Stage.PRE_DETECTOR))
             return _denied(context, trail, ReasonCode.INPUT_TOO_LARGE)
 
-        denied = await self._detect(trail, context, pinned, detector, state)
-        if denied is not None:
-            return denied
+        if continuation is not None:
+            with closing(db.connect(self._db_path)) as conn:
+                versions = policy.active_versions(conn)
+            if (
+                reviews.input_digest(fields, prepared) != continuation.input_sha256
+                or versions.policy_version != context.policy_version
+                or versions.feed_version != context.feed_version
+            ):
+                trail.record(_human(Decision.DENY, ReasonCode.REVIEW_STALE))
+                return _denied(context, trail, ReasonCode.REVIEW_STALE)
+        else:
+            assessed = await self._detect(trail, context, pinned, detector, state)
+            if isinstance(assessed, ExecuteResponse):
+                return assessed
+            if isinstance(assessed, SemanticResult):
+                review_id = reviews.enqueue(
+                    self._db_path, context, request, fields, prepared, assessed, pinned
+                )
+                return ExecuteResponse(
+                    request_id=context.request_id,
+                    task_id=context.task_id,
+                    decision=Decision.REQUIRE_APPROVAL,
+                    reason_code=ReasonCode.REVIEW_REQUIRED,
+                    policy_version=context.policy_version,
+                    execution_status=getattr(trail.calls, TOOL_ADAPTERS[trail.tool]),
+                    adapter_calls=trail.calls,
+                    output=None,
+                    redacted_fields=removed,
+                    usage=tuple(trail.usage),
+                    audit_event_ids=tuple(trail.event_ids),
+                    review_id=review_id,
+                )
 
         if summarizer is not None:
             return await self._summarize(
@@ -457,7 +598,7 @@ class Gateway:
         pinned: Policy,
         detector: SemanticEvaluator,
         state: dict[str, str],
-    ) -> ExecuteResponse | None:
+    ) -> ExecuteResponse | SemanticResult | None:
         """Steps 5–6: reserve, call Jev once and apply the policy threshold. Returns the
         denial, or ``None`` when the request may continue."""
         limits = self._limits(trail, context, pinned, Stage.PRE_DETECTOR)
@@ -488,10 +629,23 @@ class Gateway:
             return _denied(context, trail, ReasonCode.DETECTOR_UNAVAILABLE)
 
         blocked = result.risk_score >= threshold
+        review = (
+            not blocked
+            and pinned.semantic.review_threshold is not None
+            and result.risk_score >= pinned.semantic.review_threshold
+        )
         trail.record(
             _semantic(
-                Decision.DENY if blocked else Decision.ALLOW,
-                ReasonCode.SEMANTIC_RISK if blocked else ReasonCode.OK,
+                Decision.DENY
+                if blocked
+                else Decision.REQUIRE_APPROVAL
+                if review
+                else Decision.ALLOW,
+                ReasonCode.SEMANTIC_RISK
+                if blocked
+                else ReasonCode.REVIEW_REQUIRED
+                if review
+                else ReasonCode.OK,
                 Stage.PRE_DETECTOR,
             ),
             ExecutionStatus.SUCCEEDED,
@@ -501,7 +655,7 @@ class Gateway:
         )
         if blocked:
             return _denied(context, trail, ReasonCode.SEMANTIC_RISK)
-        return None
+        return result if review else None
 
     async def _summarize(
         self,
@@ -818,4 +972,13 @@ def _denied(
         output=None,
         usage=tuple(trail.usage),
         audit_event_ids=tuple(trail.event_ids),
+    )
+
+
+def _human(decision: Decision, reason: ReasonCode) -> ControlResult:
+    return ControlResult(
+        control_id=ControlId.HUMAN_REVIEW,
+        decision=decision,
+        reason_code=reason,
+        stage=Stage.PRE_SUMMARY,
     )

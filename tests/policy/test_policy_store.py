@@ -134,7 +134,7 @@ def test_seed_activates_only_missing_kinds(
     assert cli("seed") == 0
     assert active(db_path) == (1, 1)
 
-    edit_policy(config_dir, block_threshold=0.5)
+    edit_policy(config_dir, block_threshold=0.5, review_threshold=0.3)
     assert cli("seed") == 0  # an existing configuration is never replaced by seed
 
     assert active(db_path) == (1, 1)
@@ -146,7 +146,7 @@ def test_reload_activates_changed_files_only(cli, db_path: Path, config_dir: Pat
     assert cli("reload") == 0
     assert active(db_path) == (1, 1)  # unchanged files: no new versions
 
-    edit_policy(config_dir, block_threshold=0.5)
+    edit_policy(config_dir, block_threshold=0.5, review_threshold=0.3)
     assert cli("reload") == 0
 
     assert active(db_path) == (2, 1)
@@ -158,7 +158,7 @@ def test_invalid_file_leaves_the_active_configuration(
     cli, db_path: Path, config_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     cli("seed")
-    edit_policy(config_dir, block_threshold=0.5)  # valid change
+    edit_policy(config_dir, block_threshold=0.5, review_threshold=0.3)  # valid change
     (config_dir / "threat-feed.json").write_text('{"schema_version": 1, "rules": [{}]}')
 
     assert cli("reload") == 1

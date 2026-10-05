@@ -16,7 +16,7 @@ from pathlib import Path
 
 from app.settings import Settings
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 BUSY_TIMEOUT_SECONDS = 5.0
 
@@ -58,7 +58,7 @@ def init_db(db_path: Path) -> None:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
             if version == SCHEMA_VERSION:
                 return
-            if version != 0:
+            if version not in (0, 1):
                 raise SchemaVersionError(
                     f"database schema version {version}, expected {SCHEMA_VERSION}"
                 )
