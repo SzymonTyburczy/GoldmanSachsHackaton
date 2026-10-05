@@ -243,7 +243,7 @@ def test_read_does_not_need_the_summary_model_key(
 
 @pytest.mark.parametrize(
     ("override", "exfiltration", "decision"),
-    [(0.79, 0.1, "REDACT"), (0.8, 0.1, "DENY"), (0.1, 0.95, "DENY")],
+    [(0.49, 0.1, "REDACT"), (0.8, 0.1, "DENY"), (0.1, 0.95, "DENY")],
 )
 def test_threshold_from_the_policy_blocks_before_the_summary_model(
     client: TestClient,
@@ -286,9 +286,9 @@ def test_a_lower_threshold_in_a_new_policy_blocks_the_next_request(
 ) -> None:
     providers.jev.override = 0.6
     task_id = new_task("analyst-a")
-    assert summarize(execute, "analyst-a", task_id)["decision"] == "REDACT"
+    assert summarize(execute, "analyst-a", task_id)["decision"] == "REQUIRE_APPROVAL"
 
-    version = use_policy(db_path, semantic={"block_threshold": 0.5})
+    version = use_policy(db_path, semantic={"block_threshold": 0.5, "review_threshold": 0.3})
     body = summarize(execute, "analyst-a", task_id)
 
     assert (body["decision"], body["reason_code"], body["policy_version"]) == (

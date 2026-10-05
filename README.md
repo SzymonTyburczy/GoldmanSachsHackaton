@@ -67,4 +67,18 @@ make benchmark GATEWAY=1    # Real end-to-end gateway measurements
 
 Live commands require provider keys and incur API charges. Saved evaluation and benchmark reports appear in the dashboard; `make test` does not save a dashboard report.
 
+## Human in the loop
+
+Medium-risk requests wait in a persistent review queue in the dashboard. In [`config/policy.json`](config/policy.json), a Jev risk score below 0.50 continues automatically, 0.50 up to (but excluding) 0.80 returns `REQUIRE_APPROVAL`, and 0.80 or more blocks. `review_threshold` must be lower than `block_threshold`; `null` disables the queue. An older active policy without this field keeps its previous behaviour. After updating the code, restart `make dev` (SQLite migrates automatically from v1 to v2), then in the admin dashboard activate `semantic.review_threshold=0.5` and `semantic.review_timeout_seconds=900`, keeping the rest of the configuration. Use `make reload-config` instead if `config/` is the intended source of the current policy and feed.
+
+1. The analyst sends a regular `POST /v1/execute`. A Jev score in the review band pauses the document release or summary generation and returns a `review_id`.
+2. In a second tab, sign in with `CONTROLPROOF_TOKEN_REVIEWER_A` (or the admin token). The **Reviewer inbox** shows the masked assessed input with **Approve / Block** buttons. Notification is the inbox refreshing every 2 seconds; no email or SMS is sent.
+3. Approve resumes exactly that operation after re-checking access, the document and the configuration; the budget and output filter still apply. Block ends it without calling Luna. The analyst's tab fetches the result automatically. The decision audit records the `reviewer_id`.
+
+An approval expires after 15 minutes, can be used once and cannot be granted to oneself. A change to the document, policy or feed requires a new assessment. A restart keeps pending requests; an execution interrupted after approval becomes `UNKNOWN` and is not retried automatically. The queue stores only the masked prompt and document plus SHA-256 hashes for comparison, never raw values.
+
+API: `GET /v1/reviews` (reviewer/admin, client-scoped), `GET /v1/reviews/{id}`, `POST /v1/reviews/{id}/decision` with `{ "schema_version": 1, "decision": "approve" }` or `"block"`, and `GET /v1/requests/{id}` (owner/admin). The last endpoint and a repeat of the original idempotency key return the current result.
+
+Verify the flow with `uv run pytest tests/gateway/test_human_review.py -q`. These tests use explicit offline providers and do not measure real Jev accuracy.
+
 This release targets a local, single-process demonstration. It protects calls routed through its adapters; semantic detection and pattern-based redaction do not guarantee detection of every attack. Demo identities and supported adapters are defined in code, while policy values are configurable.

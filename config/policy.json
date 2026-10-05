@@ -9,6 +9,8 @@
   },
   "semantic": {
     "block_threshold": 0.8,
+    "review_threshold": 0.5,
+    "review_timeout_seconds": 900,
     "on_error": "deny"
   },
   "models": {

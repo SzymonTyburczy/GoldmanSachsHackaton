@@ -128,6 +128,14 @@ class ControlsPolicy(StrictModel):
 class SemanticPolicy(StrictModel):
     block_threshold: Probability  # DENY when risk_score >= block_threshold
     on_error: Literal["deny"]
+    review_threshold: Probability | None = None
+    review_timeout_seconds: Annotated[int, Field(strict=True, ge=60, le=86400)] = 900
+
+    @model_validator(mode="after")
+    def _check_review_band(self) -> Self:
+        if self.review_threshold is not None and self.review_threshold >= self.block_threshold:
+            raise ValueError("review_threshold must be below block_threshold")
+        return self
 
 
 class ModelsPolicy(StrictModel):

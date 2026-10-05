@@ -25,132 +25,79 @@
   </header>
 
   <main class="page">
+    <div class="intro">
+      <div><p class="eyebrow">FROM REQUEST TO RESULT</p><h1>Every AI action. A clear story.</h1>
+      <p class="intro-desc">Choose a scenario. See what passes, what gets protected, and where a request stops.</p></div>
+      <span class="intro-tag">Contral demo workspace</span>
+    </div>
     <section class="signin card" aria-labelledby="signin-title">
       <div class="card-head">
-        <div>
-          <h2 id="signin-title" class="card-title">Session</h2>
-          <p class="card-desc" id="signin-state">Not signed in. The token stays in this tab's memory only.</p>
-        </div>
+        <div><h2 id="signin-title" class="card-title">Connect your session</h2>
+        <p class="card-desc" id="signin-state">Sign in to run scenarios and explore the request history.</p></div>
         <button type="button" id="signout" class="btn btn-ghost btn-sm" hidden>Sign out</button>
       </div>
       <form id="signin-form" class="card-body row-form" autocomplete="off">
-        <label class="field grow">
-          <span class="field-label">Demo bearer token</span>
-          <input id="token" class="input" type="password" spellcheck="false"
-                 placeholder="Paste a token from .env" required minlength="32" maxlength="256">
-          <span class="field-hint">CONTROLPROOF_TOKEN_ANALYST_A, _REVIEWER_A or _ADMIN</span>
-        </label>
-        <button type="submit" class="btn btn-primary">Sign in</button>
+        <label class="field grow"><span class="field-label">Demo access token</span>
+          <input id="token" class="input" type="password" spellcheck="false" placeholder="Paste your demo token" required minlength="32" maxlength="256">
+          <span class="field-hint">Use your analyst, reviewer or admin token. It stays in this tab only.</span>
+        </label><button type="submit" class="btn btn-primary">Connect</button>
       </form>
     </section>
-
-    <div class="grid" id="workspace" hidden>
-      <div class="col">
-        <section class="card" aria-labelledby="request-title">
-          <div class="card-head">
-            <div>
-              <h2 id="request-title" class="card-title">Request</h2>
-              <p class="card-desc">Every request, typed or from a demo button, goes to <code>POST /v1/execute</code>.</p>
-            </div>
-          </div>
-          <div class="card-body stack">
-            <div class="row-form">
-              <label class="field">
-                <span class="field-label">Client</span>
-                <select id="task-client" class="input">
-                  <option value="client-a">client-a</option>
-                  <option value="client-b">client-b</option>
-                </select>
-              </label>
-              <button type="button" id="new-task" class="btn btn-secondary">New task</button>
-              <div class="field grow">
-                <span class="field-label">Task</span>
-                <span id="task-id" class="mono faint value-line">&mdash;</span>
-              </div>
-            </div>
-
-            <form id="request-form" class="stack" autocomplete="off">
+    <div id="workspace" hidden>
+      <div class="demo-layout">
+        <aside class="scenario-panel" aria-labelledby="request-title">
+          <p class="eyebrow">01 / CHOOSE A SCENARIO</p>
+          <h2 id="request-title">What should AI do?</h2>
+          <p class="card-desc">Start with a safe request, then test the boundaries.</p>
+          <div id="demos" class="scenario-list"></div>
+          <details class="advanced-request">
+            <summary>Custom request &amp; task settings</summary>
+            <div class="stack">
               <div class="row-form">
-                <label class="field">
-                  <span class="field-label">Tool</span>
-                  <select id="tool" class="input">
-                    <option value="documents.read">documents.read</option>
-                    <option value="documents.summarize">documents.summarize</option>
-                    <option value="artifacts.admit">artifacts.admit</option>
-                  </select>
-                </label>
-                <label class="field grow" id="target-field">
-                  <span class="field-label" id="target-label">Document ID</span>
-                  <input id="target" class="input mono" list="target-options" required
-                         maxlength="64" spellcheck="false" value="doc-a">
-                  <datalist id="target-options"></datalist>
-                </label>
+                <label class="field grow"><span class="field-label">Client</span><select id="task-client" class="input"><option value="client-a">Client A</option><option value="client-b">Client B</option></select></label>
+                <button type="button" id="new-task" class="btn btn-secondary btn-sm">New task</button>
               </div>
-              <label class="field" id="prompt-field" hidden>
-                <span class="field-label">Prompt</span>
-                <textarea id="prompt" class="input textarea" rows="3" maxlength="8000"
-                          spellcheck="false">Summarize this company in three sentences.</textarea>
-                <span class="field-hint">Masked by Presidio and the secret rule before Jev or Luna see it.</span>
-              </label>
-              <div class="actions">
-                <button type="submit" id="run" class="btn btn-accent">Run request</button>
-                <span id="run-hint" class="field-hint"></span>
-              </div>
-            </form>
-
-            <div>
-              <p class="section-label">Demo scenarios</p>
-              <div class="chips" id="demos"></div>
+              <span id="task-id" class="mono faint value-line">No task yet — created on first run</span>
+              <form id="request-form" class="stack" autocomplete="off">
+                <label class="field"><span class="field-label">Action</span><select id="tool" class="input"><option value="documents.read">Read a document</option><option value="documents.summarize">Summarize a document</option><option value="artifacts.admit">Check an artifact</option></select></label>
+                <label class="field" id="target-field"><span class="field-label" id="target-label">Document ID</span><input id="target" class="input mono" list="target-options" required maxlength="64" spellcheck="false" value="doc-a"><datalist id="target-options"></datalist></label>
+                <label class="field" id="prompt-field" hidden><span class="field-label">Prompt</span><textarea id="prompt" class="input textarea" rows="4" maxlength="8000" spellcheck="false">Summarize this company in three sentences.</textarea><span class="field-hint">Sensitive data is masked locally before external AI calls.</span></label>
+                <button type="submit" id="run" class="btn btn-secondary">Run custom request</button><span id="run-hint" class="field-hint"></span>
+              </form>
             </div>
-          </div>
-        </section>
-
-        <section class="card" aria-labelledby="result-title">
-          <div class="card-head">
-            <div>
-              <h2 id="result-title" class="card-title">Control state</h2>
-              <p class="card-desc">Decision, adapters that ran and the audit trail of the last request.</p>
+          </details>
+        </aside>
+        <div class="story-column">
+          <section class="card scenario-brief" aria-labelledby="scenario-title">
+            <div class="card-body">
+              <div class="scenario-heading"><div><p class="eyebrow" id="scenario-category">THE SCENARIO</p><h2 id="scenario-title"></h2></div><button type="button" id="run-scenario" class="btn btn-primary">Run scenario <span aria-hidden="true">↗</span></button></div>
+              <p id="scenario-description" class="scenario-description"></p>
+              <div id="scenario-input" class="scenario-input"></div>
+              <p id="scenario-expectation" class="field-hint"></p>
             </div>
-          </div>
-          <div class="card-body result">
-            <div class="orb-wrap">
-              <div class="orb" id="orb" data-state="idle" aria-hidden="true"></div>
-              <p class="orb-caption" id="orb-caption" role="status" aria-live="polite">Idle</p>
-            </div>
-            <div class="result-main" id="result" aria-live="polite">
-              <div class="empty">
-                <p class="empty-title">No request yet</p>
-                <p class="empty-desc">Run a request or a demo scenario to see each control's decision.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="card" aria-labelledby="history-title">
-          <div class="card-head">
-            <div>
-              <h2 id="history-title" class="card-title">History</h2>
-              <p class="card-desc" id="history-desc">Audit events, newest first. Refreshed every 2 s.</p>
-            </div>
-            <button type="button" id="export" class="btn btn-secondary btn-sm" hidden>Download audit (JSONL)</button>
-          </div>
-          <div class="table-wrap">
-            <table class="table">
-              <thead>
-                <tr><th>Time</th><th>Request</th><th>Tool</th><th>Control</th><th>Stage</th><th>Decision</th><th>Reason</th><th>Adapter</th><th>ms</th></tr>
-              </thead>
-              <tbody id="history"></tbody>
-            </table>
-          </div>
-        </section>
+          </section>
+          <section class="card story-card" aria-labelledby="result-title">
+            <div class="card-head"><div><p class="eyebrow">02 / FOLLOW THE REQUEST</p><h2 id="result-title" class="card-title">What happened?</h2></div><p id="run-status" class="live-status" role="status">Ready to run</p></div>
+            <div class="card-body result-main" id="result" aria-live="polite"></div>
+          </section>
+          <section class="card review-section" id="review-section" aria-labelledby="review-title" hidden>
+            <div class="card-head"><div><p class="eyebrow">HUMAN IN THE LOOP</p><h2 id="review-title" class="card-title">Reviewer inbox <span id="review-count" class="history-count">0</span></h2><p class="card-desc">Pause → Notify → Decide. Only your client scope is shown.</p></div></div>
+            <div class="card-body stack" id="review-inbox" aria-live="polite"></div>
+          </section>
+          <section class="card" aria-labelledby="history-title">
+            <div class="card-head"><div><p class="eyebrow">03 / EXPLORE THE HISTORY</p><h2 id="history-title" class="card-title">Request history <span id="history-count" class="history-count">0</span></h2><p class="card-desc" id="history-desc">Select a request to retrace its journey.</p></div><button type="button" id="export" class="btn btn-secondary btn-sm" hidden>Export audit</button></div>
+            <div class="history-list" id="history"></div>
+          </section>
+        </div>
       </div>
-
-      <div class="col" id="admin-col" hidden>
+      <details class="admin-drawer" id="admin-col" hidden>
+        <summary><span>Operator settings</span><span class="field-hint">Budget, policy, threat feed &amp; test reports</span></summary>
+        <div class="admin-grid">
         <section class="card" aria-labelledby="budget-title">
           <div class="card-head">
             <div>
               <h2 id="budget-title" class="card-title">Budget</h2>
-              <p class="card-desc">Global nUSD balance of the active policy. 1 USD = 10<sup>9</sup> nUSD.</p>
+              <p class="card-desc">Spending and reservations under the active policy.</p>
             </div>
           </div>
           <div class="card-body stack" id="budget">
@@ -222,10 +169,10 @@
             <p class="faint">&mdash;</p>
           </div>
         </section>
-      </div>
+        </div>
+      </details>
     </div>
   </main>
-
   <div class="toast-region" id="toasts" aria-live="polite"></div>
 </body>
 </html>

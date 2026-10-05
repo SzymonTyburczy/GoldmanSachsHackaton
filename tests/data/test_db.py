@@ -155,3 +155,16 @@ def test_valid_reservations_are_stored(conn: sqlite3.Connection) -> None:
     )
 
     assert conn.execute("SELECT count(*) FROM reservations").fetchone()[0] == 2
+
+
+def test_migration_from_v1_preserves_tasks_and_adds_review_queue(db_path: Path) -> None:
+    db.init_db(db_path)
+    with closing(db.connect(db_path)) as conn:
+        insert_task(conn)
+        conn.execute("DROP TABLE human_reviews")
+        conn.execute("PRAGMA user_version = 1")
+    db.init_db(db_path)
+    with closing(db.connect(db_path)) as conn:
+        assert conn.execute("SELECT count(*) FROM tasks").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM human_reviews").fetchone()[0] == 0
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2

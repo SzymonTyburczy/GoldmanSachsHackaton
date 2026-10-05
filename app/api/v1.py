@@ -10,7 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Header, Request
 
-from app import audit, db
+from app import audit, db, reviews
 from app.api.errors import ApiError, request_id_of
 from app.api.paging import EventsAfter, EventsLimit
 from app.auth import CurrentPrincipal
@@ -20,7 +20,10 @@ from app.contracts import (
     Decision,
     ExecuteRequest,
     ExecuteResponse,
+    HumanReview,
+    HumanReviewPage,
     ReasonCode,
+    ReviewDecisionRequest,
     TaskResponse,
 )
 from app.controls import access
@@ -101,3 +104,27 @@ async def execute(
     """
     gateway: Gateway = request.app.state.gateway
     return await gateway.execute(request_id_of(request), principal, body, idempotency_key)
+
+
+@router.get("/reviews")
+def review_inbox(principal: CurrentPrincipal, request: Request) -> HumanReviewPage:
+    return reviews.list_reviews(request.app.state.settings.db_path, principal)
+
+
+@router.get("/reviews/{review_id}")
+def review_status(review_id: UUID, principal: CurrentPrincipal, request: Request) -> HumanReview:
+    return reviews.get_review(request.app.state.settings.db_path, principal, review_id)
+
+
+@router.post("/reviews/{review_id}/decision")
+async def review_decision(
+    review_id: UUID, body: ReviewDecisionRequest, principal: CurrentPrincipal, request: Request
+) -> HumanReview:
+    return await request.app.state.gateway.decide_review(principal, review_id, body.decision)
+
+
+@router.get("/requests/{request_id}")
+def request_status(
+    request_id: UUID, principal: CurrentPrincipal, request: Request
+) -> ExecuteResponse:
+    return request.app.state.gateway.response_for(principal, request_id)

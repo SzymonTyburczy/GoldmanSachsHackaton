@@ -92,6 +92,7 @@ def test_stale_update_is_refused(client: TestClient, headers: Headers) -> None:
     assert put_policy(client, headers, shipped(), expected=1).status_code == 200
     policy = shipped()
     policy["semantic"]["block_threshold"] = 0.1
+    policy["semantic"]["review_threshold"] = 0.05
 
     response = put_policy(client, headers, policy, expected=1)
 

@@ -33,6 +33,8 @@ def test_shipped_policy_matches_the_shared_agreements() -> None:
     policy = Policy.model_validate(config_dict("policy"))
 
     assert policy.semantic.block_threshold == 0.8
+    assert policy.semantic.review_threshold == 0.5
+    assert policy.semantic.review_timeout_seconds == 900
     assert (policy.models.detector, policy.models.summary) == ("jev-1.13.0", "gpt-6-luna")
     assert policy.fields_for(Role.ANALYST) == {"company_name", "status", "notes"}
     assert policy.fields_for(Role.REVIEWER) == {"company_name", "status", "notes", "review_note"}
@@ -71,6 +73,9 @@ def test_policy_feeds_the_budget_and_pricing_modules() -> None:
         ("semantic.block_threshold", 1.5),
         ("semantic.block_threshold", True),
         ("semantic.on_error", "allow"),
+        ("semantic.review_threshold", 0.8),
+        ("semantic.review_threshold", True),
+        ("semantic.review_timeout_seconds", 1),
         ("resources.max_requests_per_task", 0),
         ("budget.task_limit_nusd", "50000000"),
         ("models.summary_timeout_seconds", 600),
