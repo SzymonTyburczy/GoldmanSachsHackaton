@@ -10,6 +10,10 @@
 
 Contral sits between an agent and its tools. It checks permissions, redacts sensitive data, assesses suspicious instructions, reserves provider costs and records what actually executed. An operator dashboard brings requests, decisions, budgets, policy changes and audit history into one place.
 
+<p align="center">
+  <img src="assets/readme/demo-safe-summary.png" alt="A safe summary: sensitive values are masked locally before the prompt is sent, and identity, access, privacy, AI risk and budget checks all pass" width="860">
+</p>
+
 ## How it works
 
 - **Access control:** server-owned identities, roles and client scopes; unauthorized documents are blocked before reading.
@@ -20,6 +24,37 @@ Contral sits between an agent and its tools. It checks permissions, redacts sens
 - **Auditability:** versioned policy/feed, per-adapter execution status, request history and JSONL export.
 
 The stack is Python 3.12, FastAPI, Pydantic, SQLite and a browser dashboard. Jev (`jev-1.13.0`) assesses risk; OpenAI Luna (`gpt-6-luna`) generates summaries. All included documents and artifacts are synthetic.
+
+### What it stops
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/readme/demo-client-boundary.png" alt="Another client's file is blocked before it is read"></td>
+    <td width="50%"><img src="assets/readme/demo-prompt-injection.png" alt="A hidden instruction scores high AI risk and the summary is skipped"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Client boundary</b>: another client's file is never read.</td>
+    <td align="center"><b>Prompt injection</b>: high Jev risk skips generation.</td>
+  </tr>
+  <tr>
+    <td><img src="assets/readme/demo-budget-limit.png" alt="Of 20 looping requests with a budget of 5, 5 run and 15 are refused"></td>
+    <td><img src="assets/readme/demo-artifact-rejected.png" alt="A model.pkl artifact matching the threat feed fails hash and format checks and is never executed"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Runaway loop</b>: requests beyond the budget are refused.</td>
+    <td align="center"><b>Poisoned artifact</b>: rejected without being deserialized.</td>
+  </tr>
+  <tr>
+    <td><img src="assets/readme/demo-live-policy.png" alt="Activating policy v4 with a stricter threshold changes the decision for the same risk score from allowed to blocked"></td>
+    <td><img src="assets/readme/demo-audit.png" alt="Every decision appears in the audit log and can be exported as JSONL"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Live policy</b>: a new version changes decisions without a restart.</td>
+    <td align="center"><b>Audit</b>: every decision is logged and exportable.</td>
+  </tr>
+</table>
+
+<sub>Frames from the <a href="assets/demo/contral-demo-slides.html">demo slides</a>; values are illustrative.</sub>
 
 ## Run locally
 
@@ -47,6 +82,17 @@ Open the [dashboard](http://127.0.0.1:8000) or the [interactive API docs](http:/
 **Without provider keys:** the dashboard, configuration, artifact admission and offline tests work. Document operations require Jev; summaries also require OpenAI. Missing keys produce a denial, never a simulated AI result.
 
 ## Try the demo
+
+<table>
+  <tr>
+    <td width="58%"><img src="website/img/dash-workspace.webp" alt="Demo workspace: pick a scenario, follow the request through each checkpoint and explore the request history"></td>
+    <td width="42%"><img src="website/img/dash-operator.webp" alt="Operator views: budget, active controls and outcomes, policy configuration and saved test results"></td>
+  </tr>
+  <tr>
+    <td align="center">Demo workspace</td>
+    <td align="center">Operator views</td>
+  </tr>
+</table>
 
 1. Sign in as admin and create a task for `client-a`.
 2. Run **Admit template**. Block its returned hash from the result panel, then run it again to see the feed change take effect. **Admit tampered** and **Admit non-JSON** demonstrate artifact rejection.
